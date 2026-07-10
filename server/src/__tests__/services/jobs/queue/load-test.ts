@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
 import { getQueueServiceInstance } from '../../../../services/queueService'
 import type { JobData } from '../../../../services/jobs/types'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 describe('Queue Service Load Testing', () => {
   let queueService: Awaited<ReturnType<typeof getQueueServiceInstance>>

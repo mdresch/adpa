@@ -2,7 +2,7 @@
 import { pool, connectDatabase } from '../database/connection';
 import { digitalTwinAssetService } from '../services/digitalTwinAssetService';
 import { createTriggerRule } from '../services/digitalTwinTriggerService';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto'
 import { logger } from '../utils/logger';
 
 async function runVerification() {

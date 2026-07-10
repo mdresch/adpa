@@ -1,5 +1,6 @@
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => '11111111-1111-1111-1111-111111111111'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => '11111111-1111-1111-1111-111111111111'),
 }));
 
 import { documentGenerationService } from '../services/documentGenerationService';

@@ -3,7 +3,7 @@
  * Core business logic for document generation from templates
  */
 
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import Handlebars from 'handlebars'

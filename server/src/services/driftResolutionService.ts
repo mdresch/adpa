@@ -11,12 +11,11 @@ import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { DriftPoint } from './driftDetectionService'
 import { knowledgeBaseService } from './knowledgeBaseService'
-import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { emergencyMeetingService } from './emergencyMeetingService'
 import { approvalWorkflowService } from './approvalWorkflowService'
 import { createKnowledgeBaseFromDrift } from '../modules/knowledgeBase/integration'
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { redis } from '../database/redis'
 
 export interface ResolutionResult {
@@ -857,7 +856,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
     )
 
     // Create change request as a document
-    const changeRequestId = uuidv4()
+    const changeRequestId = randomUUID()
     const changeRequestName = `Change Request: Major Drift Changes - ${document.name || document.title || 'Unnamed Document'}`
 
     await client.query(
@@ -887,7 +886,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
     )
 
     // Create entry in cr_document_updates table to track the update
-    const updateTaskId = uuidv4()
+    const updateTaskId = randomUUID()
     await client.query(
       `INSERT INTO cr_document_updates (
         id, change_request_id, target_document_id, status, 

@@ -1006,7 +1006,7 @@ router.post('/project/quick-create', authenticate, async (req: Request, res: Res
       }
     }
 
-    const projectId = require('uuid').v4();
+    const projectId = require('crypto').randomUUID();
     
     // Create project with minimal fields for onboarding
     const baseParams = [

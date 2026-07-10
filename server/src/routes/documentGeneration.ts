@@ -1,6 +1,6 @@
 import express from "express"
 import Joi from "joi"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
@@ -1259,7 +1259,7 @@ router.post("/generate-new-version",
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
 
         // Enqueue quality audit job (async, non-blocking)
-        const auditJobId = require('uuid').v4()
+        const auditJobId = require('crypto').randomUUID()
         getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId: existingDocumentId,

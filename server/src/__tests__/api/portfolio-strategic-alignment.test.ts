@@ -18,7 +18,7 @@ import { getAuthenticatedUser } from "@/lib/auth-utils"
 import { connectDatabase, pool } from "@/server/src/database/connection"
 import dotenv from "dotenv"
 import path from "path"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 
 const ownerUser = {
   id: "33333333-3333-3333-3333-333333333333",

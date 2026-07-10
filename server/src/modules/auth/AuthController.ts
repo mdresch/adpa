@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID as uuidv4 } from 'crypto'
 import { AuthRepository } from './AuthRepository';
 import { childLogger } from "../../utils/logger";
 import { trackActivity } from "../../middleware/analyticsMiddleware";

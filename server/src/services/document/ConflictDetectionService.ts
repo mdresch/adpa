@@ -7,7 +7,7 @@
 
 import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto'
 import { io } from '@/socket';
 import { VersioningService } from './VersioningService';
 

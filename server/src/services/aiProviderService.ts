@@ -7,7 +7,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import { openaiConnector } from '../modules/ai/openai'
 import { googleConnector } from '../modules/ai/google'
 import { azureConnector } from '../modules/ai/azure'
@@ -249,7 +249,7 @@ class AIProviderService {
    * Add a new provider
    */
   async addProvider(config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-    const id = uuidv4()
+    const id = randomUUID()
 
     try {
       // Encrypt API key

@@ -183,6 +183,12 @@ export function getQueueServiceInstance(): ReturnType<typeof createQueueService>
   return queueServiceInstance
 }
 
+// Test-only injection seam: lets integration tests substitute a QueueService built on
+// MockQueues instead of the real RabbitMQ-backed queues above (see tests/setup/integration-setup.js).
+export function setQueueServiceInstance(instance: ReturnType<typeof createQueueService>): void {
+  queueServiceInstance = instance
+}
+
 // Exported helpers delegating to QueueService
 export async function addJob(...args: Parameters<ReturnType<typeof createQueueService>["addJob"]>) {
   return (await getQueueServiceInstance()).addJob(...args)

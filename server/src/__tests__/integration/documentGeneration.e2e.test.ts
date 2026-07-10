@@ -4,8 +4,9 @@ import { aiService } from '../../services/aiService';
 import { pool } from '../../database/connection';
 import { notificationService } from '../../services/notificationService';
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'generated-uuid'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'generated-uuid'),
 }));
 
 jest.mock('../../database/connection', () => ({

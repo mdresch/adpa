@@ -1,6 +1,6 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
 import { pool } from '../../database/connection';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto'
 
 export interface DocumentData {
   id?: string;

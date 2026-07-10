@@ -139,7 +139,7 @@ export class AnalysisRepository {
         updated_at = NOW()
       RETURNING id, name, provider_type, is_active, created_at, updated_at
     `;
-    const id = provider.id || require('uuid').v4();
+    const id = provider.id || require('crypto').randomUUID();
     const values = [
       id,
       provider.name,

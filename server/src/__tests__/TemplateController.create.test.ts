@@ -1,5 +1,6 @@
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'generated-template-id'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'generated-template-id'),
 }));
 
 jest.mock('../database/connection', () => ({

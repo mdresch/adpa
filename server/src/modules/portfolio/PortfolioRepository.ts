@@ -117,7 +117,7 @@ export class PortfolioRepository {
 
   async create(data: PortfolioData, client?: PoolClient) {
     const db = client || this.pool;
-    const id = data.id || require('uuid').v4();
+    const id = data.id || require('crypto').randomUUID();
     const query = `
       INSERT INTO portfolio_governance (
         id, portfolio_name, description, company_id, owner_id, portfolio_lead,

@@ -136,7 +136,7 @@ export class UserRepository {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING id, email, name, role, is_active, created_at, metadata, company_id
     `;
-    const id = data.id || require('uuid').v4();
+    const id = data.id || require('crypto').randomUUID();
     const values = [
       id, data.email, data.password_hash, data.name, data.role || 'user', 
       data.is_active ?? true, data.metadata ? JSON.stringify(data.metadata) : null,

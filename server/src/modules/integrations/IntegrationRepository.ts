@@ -105,7 +105,7 @@ export class IntegrationRepository {
 
   async create(data: IntegrationData, client?: PoolClient) {
     const db = client || this.pool;
-    const id = data.id || require('uuid').v4();
+    const id = data.id || require('crypto').randomUUID();
     const query = `
       INSERT INTO integrations (id, name, type, configuration, credentials_encrypted, is_active, created_by)
       VALUES ($1, $2, $3, $4, $5, $6, $7)

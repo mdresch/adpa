@@ -5,7 +5,8 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { validate as isUuid } from 'uuid'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const isUuid = (value: string): boolean => UUID_PATTERN.test(value)
 
 export interface TeamAgreement {
   id: string

@@ -2,7 +2,7 @@ import AdmZip from 'adm-zip'
 import { logger } from '../utils/logger'
 import { digitalTwinAssetService } from './digitalTwinAssetService'
 import { digitalTwinEventService } from './digitalTwinEventService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 export interface VisioParseResult {
     pages: VisioPage[]

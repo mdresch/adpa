@@ -6,7 +6,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService as sharedAIService } from './aiService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import Handlebars from 'handlebars'
 
 export interface DailyActivity {

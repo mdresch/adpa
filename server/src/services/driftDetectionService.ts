@@ -7,7 +7,7 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { baselineService, BaselineComparison } from './baselineService'
 import { entityExtractionService, ExtractedEntity } from './entityExtractionService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import { escalationService } from './escalationService'
 
 // Normalized drift point with snake_case fields from storage plus camelCase helpers used by
@@ -119,7 +119,7 @@ export class DriftDetectionService {
     severity: DriftSeverity
     triggeredBy?: string
   }): Promise<{ id: string; drift_severity: DriftSeverity }> {
-    const id = uuidv4()
+    const id = randomUUID()
     try {
       await pool.query(
         `INSERT INTO baseline_drift_detection (id, project_id, source_document_id, baseline_id, drift_severity, drift_description, ai_processing_metadata, status, detected_at, detected_by)
@@ -642,7 +642,7 @@ export class DriftDetectionService {
   private async storeDriftDetection(
     drift: Omit<DriftDetection, 'id' | 'detected_at' | 'updated_at'>
   ): Promise<DriftDetection> {
-    const driftId = uuidv4()
+    const driftId = randomUUID()
 
     const result = await pool.query(
       `INSERT INTO drift_detections (

@@ -7,7 +7,7 @@
 
 import { positiveDriftChangeRequestService } from '../../services/positiveDriftChangeRequestService'
 import { pool } from '../../database/connection'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import { DriftPoint } from '../../services/driftDetectionService'
 
 describe('Positive Drift Change Request Generation', () => {
