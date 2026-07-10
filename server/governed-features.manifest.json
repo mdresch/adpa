@@ -171,12 +171,13 @@
     },
     {
       "id": "federated-capability-ownership",
-      "description": "Phase 0 (ADR-005): department identity, Firebase claims sync job, and company created_by capture",
+      "description": "ADR-005 Phases 0-1: department identity, Firebase claims sync job, company created_by capture, and capability ownership registry reconciliation",
       "skills": [
-        "adpa-federated-capability-ownership"
+        "adpa-federated-capability-ownership",
+        "adpa-capability-registry"
       ],
       "overlapGuard": false,
-      "spec": "docs/superpowers/specs/2026-07-09-federated-capability-ownership-phase0-design.md",
+      "spec": "docs/superpowers/specs/2026-07-10-federated-capability-ownership-phase1-design.md",
       "testModuleDir": "federated-capability-ownership",
       "testPathPattern": "modules/federated-capability-ownership"
     }

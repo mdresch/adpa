@@ -7,7 +7,7 @@ description: Department-scoped ownership registry and activation gating for gove
 
 ## Purpose
 
-Every governed module gets three declared owners (platform operator, functional owner department, control definition owner department), scoped per-portfolio, enforced at activation time rather than left as an unenforced convention. Phase 0 (this packet's current scope) gives ADPA identity a department attribute and syncs it into Firebase custom claims, since the .NET orchestrator (`TaskApprovalGate`, `RitualController`) has no local user table and trusts only the validated JWT. Later phases (see [the implementation plan](../../../docs/implementation/FEDERATED_CAPABILITY_OWNERSHIP_IMPLEMENTATION_PLAN.md)) build the ownership registry, the approval gate, the activation lifecycle, DRACO wiring, ledger hash-chaining, the Governor Portal UI, and the final partial-delivery lockout on top of it.
+Every governed module gets three declared owners (platform operator, functional owner department, control definition owner department), scoped per-portfolio, enforced at activation time rather than left as an unenforced convention. Phase 0 (this skill's scope) gives ADPA identity a department attribute and syncs it into Firebase custom claims, since the .NET orchestrator (`TaskApprovalGate`, `RitualController`) has no local user table and trusts only the validated JWT. Phase 1 (sibling skill [adpa-capability-registry](../adpa-capability-registry/SKILL.md), same manifest packet) builds the ownership registry itself. Later phases (see [the implementation plan](../../../docs/implementation/FEDERATED_CAPABILITY_OWNERSHIP_IMPLEMENTATION_PLAN.md)) build the approval gate, the activation lifecycle, DRACO wiring, ledger hash-chaining, the Governor Portal UI, and the final partial-delivery lockout on top of it.
 
 ## Invariants
 
@@ -55,6 +55,7 @@ npm run verify:governed-features
 
 ## Related Skills
 
+- `adpa-capability-registry` — Phase 1, the ownership-registry sibling under the same packet
 - `adpa-governed-feature-loop` — the process this packet follows
 - `adpa-projects-pillar7` — sibling tenant/portfolio scoping conventions
 - `adpa-compliance-layer-pillar4` — sibling dual-write / audit discipline
