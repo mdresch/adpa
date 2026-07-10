@@ -10,12 +10,43 @@ export interface UnifiedPdfOptions extends PDFOptions {
     filename?: string;
 }
 
+// Chromium is the expensive resource here, not the Node module import (that part
+// was already lazy via dynamic import()). A launched headless browser instance
+// commonly holds 100-300MB+ resident even while completely idle, and per REQ-004
+// of the api-worker-split spec it's supposed to close "immediately after use" --
+// but the only method that actually closes it (cleanup(), below) was previously
+// called from nowhere in runtime code, only from a test. That meant the first PDF
+// export of the process's lifetime launched Chromium and it then stayed resident
+// forever, which is a very plausible direct contributor to OOM crashes on
+// resource-constrained hosts (the spec's own stated problem, e.g. 512MB Render
+// instances). This idle-timeout closes the browser automatically once nothing has
+// asked for it for IDLE_TIMEOUT_MS, trading a relaunch cost on the next request
+// after a long idle gap for not holding Chromium's memory open indefinitely.
+const IDLE_TIMEOUT_MS = Number(process.env.PDF_BROWSER_IDLE_TIMEOUT_MS ?? 5 * 60 * 1000);
+
 export class UnifiedPdfService {
     private static instance: UnifiedPdfService;
     private browser: Browser | null = null;
     private isInitializing = false;
+    private idleTimer: NodeJS.Timeout | null = null;
 
     private constructor() {}
+
+    /**
+     * (Re)schedules the idle-close timer. Called whenever the browser is
+     * acquired or used, so an active workload never triggers a mid-use close --
+     * only a genuine idle gap of IDLE_TIMEOUT_MS with no requests does.
+     */
+    private scheduleIdleClose(): void {
+        if (this.idleTimer) clearTimeout(this.idleTimer);
+        this.idleTimer = setTimeout(() => {
+            this.cleanup().catch(error =>
+                logger.error('Idle Puppeteer browser cleanup failed:', error)
+            );
+        }, IDLE_TIMEOUT_MS);
+        // Don't let this timer keep the Node process alive on its own.
+        this.idleTimer.unref?.();
+    }
 
     public static getInstance(): UnifiedPdfService {
         if (!UnifiedPdfService.instance) {
@@ -28,7 +59,10 @@ export class UnifiedPdfService {
      * Initialize the Puppeteer browser instance dynamically
      */
     public async getBrowser(): Promise<Browser> {
-        if (this.browser) return this.browser;
+        if (this.browser) {
+            this.scheduleIdleClose();
+            return this.browser;
+        }
 
         if (this.isInitializing) {
             // Wait for initialization to complete
@@ -61,13 +95,18 @@ export class UnifiedPdfService {
             }
 
             this.browser = await puppeteer.launch(launchOptions) as unknown as Browser;
-            
+
             // Handle browser disconnection
             this.browser.on('disconnected', () => {
                 logger.warn('Puppeteer browser disconnected');
                 this.browser = null;
+                if (this.idleTimer) {
+                    clearTimeout(this.idleTimer);
+                    this.idleTimer = null;
+                }
             });
 
+            this.scheduleIdleClose();
             return this.browser;
         } catch (error: any) {
             logger.error('Failed to launch Puppeteer browser dynamically:', error);
@@ -265,6 +304,10 @@ export class UnifiedPdfService {
      * Gracefully close the browser instance
      */
     public async cleanup(): Promise<void> {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+            this.idleTimer = null;
+        }
         if (this.browser) {
             await this.browser.close();
             this.browser = null;
