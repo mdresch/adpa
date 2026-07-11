@@ -8,7 +8,7 @@ import {
     UIMessage,
     UIMessageStreamWriter
 } from 'ai'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 import { researcher } from '@/lib/morphic/agents/researcher'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
