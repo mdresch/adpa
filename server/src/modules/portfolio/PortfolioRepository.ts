@@ -24,6 +24,17 @@ export class PortfolioRepository {
 
   constructor(private pool: Pool) {}
 
+  /**
+   * Lightweight, unpaginated ID listing for reconciliation passes (ADR-005
+   * Phase 1's capability_registry seed) that must see every active portfolio —
+   * findAll's default limit=50/joined-row shape is the wrong tool for that.
+   */
+  async listActiveIds(client?: PoolClient): Promise<string[]> {
+    const db = client || this.pool;
+    const result = await db.query(`SELECT id FROM portfolio_governance WHERE status = 'active'`);
+    return result.rows.map((row) => row.id);
+  }
+
   async findAll(options: {
     status?: string;
     limit?: number;

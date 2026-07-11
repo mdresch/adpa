@@ -16,6 +16,7 @@ import {
   digitalTwinTriggerQueue,
   gkgSyncQueue,
   semanticProcessingQueue,
+  departmentClaimsSyncQueue,
   WORKER_ID,
   updateJobStatus,
   getQueueServiceDependencies
@@ -626,4 +627,31 @@ export async function registerWorkers(): Promise<void> {
       }
     })()
   }
+
+  // Department Claims Sync Processor (ADR-005 Phase 0) — dual-write-safe Firebase
+  // custom-claims sync. enqueueClaimsSyncJob only ever persists a DB row + hands off
+  // to this queue; processClaimsSyncJob marks the row complete only after a successful
+  // Firebase Admin call, leaving it retryable (RabbitMQ redelivery per the queue's
+  // configured attempts/backoff) on failure.
+  departmentClaimsSyncQueue.process("department-claims-sync", 1, async (job) => {
+    const { jobId, userId, claims, isRemoval } = job.data as any
+    try {
+      const { processClaimsSyncJob } = await import("../../modules/departments/departmentClaimsSyncJob")
+      const { firebaseClaimsAdmin } = await import("../../modules/departments/firebaseClaimsAdmin")
+      const { createClaimsSyncQueueAdapter } = await import("../../modules/departments/claimsSyncQueueAdapter")
+      await processClaimsSyncJob(
+        {
+          db: { query: (sql: string, params?: any[]) => pool.query(sql, params) },
+          queue: createClaimsSyncQueueAdapter(departmentClaimsSyncQueue),
+          firebaseAdmin: firebaseClaimsAdmin
+        },
+        { id: String(jobId), userId, claims, isRemoval }
+      )
+      logger.info(`[DEPARTMENT-CLAIMS-SYNC] Job completed: ${jobId}`)
+      return { success: true, jobId }
+    } catch (error) {
+      logger.error(error, `[DEPARTMENT-CLAIMS-SYNC] Job failed: ${jobId}`)
+      throw error
+    }
+  })
 }

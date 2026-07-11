@@ -102,6 +102,27 @@ jest.mock('@documenso/pdf-sign', () => ({
   updateSigningPlaceholder: jest.fn().mockResolvedValue(Buffer.from('mock-updated-pdf'))
 }));
 
+// Mock @adobe/pdfservices-node-sdk: its own nested uuid@14 dependency ships an
+// ESM-only dist-node build ("export { default as MAX } from './max.js'"),
+// which throws "Unexpected token 'export'" under Jest's CJS transform the
+// moment anything in the require chain (src/server.ts -> documentGenerator ->
+// adobePdfService -> adobe-pdf.ts) touches it. src/integrations/adobe-pdf.ts
+// only references PDFServicesSDK.* inside function bodies, never at module
+// load time, so an empty namespace mock is safe here.
+jest.mock('@adobe/pdfservices-node-sdk', () => ({}));
+
+// Mock @paralleldrive/cuid2: also ESM-only ("import ... from './src/index.js'"
+// with no CJS build), pulled in transitively via lib/morphic/db/schema.ts once
+// src/server.ts's morphic routes are required. Only createId is actually used
+// (lib/morphic/db/schema.ts's generateId()); the rest are stubbed for any other
+// consumer further down the require chain.
+jest.mock('@paralleldrive/cuid2', () => ({
+  createId: () => `mock-cuid-${Math.random().toString(36).slice(2)}`,
+  init: () => () => `mock-cuid-${Math.random().toString(36).slice(2)}`,
+  getConstants: () => ({}),
+  isCuid: () => true
+}));
+
 // Shared state for hooks
 let internalPool;
 let connectDatabase;
