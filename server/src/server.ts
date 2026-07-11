@@ -76,7 +76,6 @@ import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
 import authModuleRoutes from "./modules/auth/routes"
 import identityModuleRoutes from "./modules/identity/routes"
-import capabilityRegistryModuleRoutes from "./modules/capabilityRegistry/routes"
 import portfolioModuleRoutes from "./modules/portfolio/routes"
 import executionModuleRoutes from "./modules/execution/routes"
 import templatesModuleRoutes from "./modules/templates/routes"
@@ -303,8 +302,6 @@ if (projectsModuleRoutes && projectsModuleRoutes[0]) app.use("/api/projects", pr
 if (authModuleRoutes && authModuleRoutes[0]) app.use("/api/auth", authModuleRoutes[0].router)
 // Identity router defines /companies and /users; mount at /api for frontend apiClient paths
 if (identityModuleRoutes && identityModuleRoutes[0]) app.use("/api", identityModuleRoutes[0].router)
-// Internal, service-to-service only (consumed by the .NET orchestrator's TaskApprovalGate, ADR-005 Phase 2)
-if (capabilityRegistryModuleRoutes && capabilityRegistryModuleRoutes[0]) app.use("/api/v1", capabilityRegistryModuleRoutes[0].router)
 if (morphicModuleRoutes && morphicModuleRoutes[0]) {
   app.use("/api/v1/morphic", morphicModuleRoutes[0].router)
   app.use("/api/morphic", morphicModuleRoutes[0].router)
