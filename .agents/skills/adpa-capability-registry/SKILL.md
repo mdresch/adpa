@@ -21,8 +21,8 @@ This skill also now covers the read-only HTTP lookup (`CapabilityRegistryReposit
 - Must always: detect orphaned rows (a `module_id` no longer present in the manifest) as a distinct check from missing rows — a retired module's stale row must not be mistaken for a still-governed one.
 - Must always: default `platformOperator` to `'IT'` and `functionalOwnerType` to `'department'` in the row builder — these are Phase 1's documented defaults, not placeholders that happen to work.
 - Must always: read attestation cadence from configuration (`CAPABILITY_ATTESTATION_CADENCE_DAYS`), never hardcode the cadence as a literal at a call site.
-- Must never: treat this packet's reconciliation as the actual DB-side enforcement. The live check (querying real Postgres, actually inserting missing rows, alerting on orphans) is a separate operational job that calls this pure logic — not built in this packet, same scoping discipline Phase 0 applied to its own DDL.
-- Must never: extend `server/scripts/verify-governed-features.mjs` to do this reconciliation — that script is a static, filesystem-only checker with no DB access; conflating the two would give it a dependency it doesn't have today.
+- Must never: treat this packet's reconciliation as the actual DB-side enforcement by itself — it's the pure decision logic. The live check now exists as separate operational scripts that call it: `seedCapabilityRegistry.ts` (`npm run seed:capability-registry`, inserts missing rows via `CapabilityRegistryRepository.insertMissing`, `ON CONFLICT DO NOTHING` so it never clobbers an assigned owner) and `checkCapabilityRegistryCoverage.ts` (`npm run check:capability-registry-coverage`, a CI/deploy-pipeline gate — deliberately **not** folded into `verify:governed-features`, see the next bullet).
+- Must never: extend `server/scripts/verify-governed-features.mjs` to do this reconciliation — that script is a static, filesystem-only checker with no DB access, and stays that way (CLAUDE.md documents `test:features`/`verify:governed-features` as fast and DB-free, required before every commit). `checkCapabilityRegistryCoverage.ts` is the DB-aware equivalent, kept as its own script for exactly this reason.
 - Must always: keep the `GET /api/v1/capability-registry/:moduleId/:portfolioId` lookup read-only and unauthenticated-by-design (no user JWT exists on this service-to-service call) — matches the existing no-auth-header convention already used by the orchestrator's other typed HttpClients (`GovernanceApiClient`, `IntelligenceClient`); trust is via the internal network boundary, not a credential.
 
 ## Interaction Rules
@@ -38,9 +38,12 @@ This skill also now covers the read-only HTTP lookup (`CapabilityRegistryReposit
 | `server/src/modules/capabilityRegistry/capabilityRegistryReconciliation.ts` | Pure logic: `reconcileCapabilityRegistry` (missing/orphaned rows), `buildCapabilityRegistryRow` (owner-column defaults), `getAttestationCadenceDays` (config-driven cadence) |
 | `server/migrations/433_capability_registry.sql` | Creates `capability_registry` (FK to `portfolio_governance`, `UNIQUE (module_id, portfolio_id)`) — DDL correctness itself is integration-test territory |
 | `server/src/__tests__/modules/federated-capability-ownership/capabilityRegistry.test.ts` | Contract Guards: REQ-CAP-001..006 |
-| `server/src/modules/capabilityRegistry/CapabilityRegistryRepository.ts` | DB-backed lookup: `findByModuleAndPortfolio(moduleId, portfolioId)` — scoped by both, never module_id alone |
+| `server/src/modules/capabilityRegistry/CapabilityRegistryRepository.ts` | DB-backed accessor: `findByModuleAndPortfolio` (scoped by both, never module_id alone), `listAll`, `insertMissing` (`ON CONFLICT (module_id, portfolio_id) DO NOTHING`) |
 | `server/src/modules/capabilityRegistry/CapabilityRegistryController.ts` / `routes.ts` | `GET /api/v1/capability-registry/:moduleId/:portfolioId` — Phase 2's only way to read `capability_registry` from the orchestrator |
+| `server/src/modules/capabilityRegistry/seedCapabilityRegistry.ts` | Live seed/reconciliation runner — cross-products the real manifest against `PortfolioRepository.listActiveIds()`, inserts missing rows. CLI: `npm run seed:capability-registry` (also chained into `migrate:dev`) |
+| `server/src/modules/capabilityRegistry/checkCapabilityRegistryCoverage.ts` | Live DB-aware coverage gate. CLI: `npm run check:capability-registry-coverage` — CI/deploy pipeline only, not the fast pre-push path |
 | `server/src/__tests__/modules/federated-capability-ownership/capabilityRegistryRepository.test.ts` | Contract Guards: REQ-CAP-007..008 |
+| `server/tests/integration/federated-capability-ownership-phase1.test.ts` | Real-Postgres proof: seeding, idempotency, owner-assignment survival, coverage-check detection |
 
 ## Commands
 
@@ -49,11 +52,15 @@ cd server
 npm run test:features -- federated-capability-ownership   # this packet only (Phase 0 + Phase 1 tests)
 npm run test:features                                      # all governed packets (CI)
 npm run verify:governed-features
+npm run seed:capability-registry                            # live seed/reconciliation against real Postgres
+npm run check:capability-registry-coverage                  # live DB-aware coverage gate (CI/deploy, not pre-push)
+npm run test:integration                                    # real-Postgres proof, all Phase 0-3 integration tests
 ```
 
 ## Related Skills
 
 - `adpa-federated-capability-ownership` — Phase 0, the identity/claims-sync sibling under the same packet
+- `adpa-capability-activation-lifecycle` — Phase 3, the state-machine consumer built on top of `activation_status`
 - `adpa-task-approval-gate` — Phase 2, the orchestrator-side consumer of the lookup endpoint this skill documents
 - `adpa-governed-feature-loop` — the process this packet follows
 - `adpa-projects-pillar7` — sibling tenant/portfolio scoping conventions

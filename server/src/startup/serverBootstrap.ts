@@ -135,4 +135,17 @@ export async function initializeServerWithDependencyGraph(
   } catch (err) {
     console.warn('⚠️ Could not start stuck-job monitor', err)
   }
+
+  // Initialize capability attestation-lapse sweep (ADR-005 Phase 3 task 5)
+  if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+    try {
+      const { scheduleCapabilityAttestationSweep } = require('../jobs/capabilityAttestationJob')
+      scheduleCapabilityAttestationSweep()
+      console.log('✅ Capability attestation-lapse sweep scheduled (hourly)')
+    } catch (err) {
+      console.warn('⚠️ Could not start capability attestation-lapse sweep', err)
+    }
+  } else {
+    console.log('⏭️  Skipping in-memory capability attestation-lapse sweep')
+  }
 }

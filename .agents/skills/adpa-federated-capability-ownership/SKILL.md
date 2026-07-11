@@ -35,6 +35,11 @@ Every governed module gets three declared owners (platform operator, functional 
 | `server/src/modules/departments/departmentClaims.ts` | Pure logic: department code validation, active-rows-only claims builder, revoke-on-removal decision |
 | `server/src/modules/departments/departmentClaimsSyncJob.ts` | Dual-write-safe job: enqueue (DB row + queue, never inline Firebase) and worker processing (complete-only-on-success) |
 | `server/src/modules/departments/departmentMembershipService.ts` | `syncDepartmentMembershipChange()` — on a `user_departments` row change, re-queries the user's full active-row set and calls `enqueueClaimsSyncJob` once with the correct `isRemoval` |
+| `server/src/modules/departments/UserDepartmentRepository.ts` / `UserDepartmentsController.ts` / `routes.ts` | The real HTTP entrypoint (`/api/v1/departments/...`, admin-gated) that actually exercises create/deactivate → `syncDepartmentMembershipChange` — this is what makes the dual-write-safe job pipeline reachable at all, not just unit-tested in isolation |
+| `server/src/modules/departments/firebaseClaimsAdmin.ts` | Real `admin.auth()` implementation of `ClaimsSyncFirebaseAdmin` (the interface itself has no other implementation) |
+| `server/src/modules/departments/claimsSyncQueueAdapter.ts` | Adapts the real RabbitMQ-backed `IQueue` to `ClaimsSyncQueue`'s `.enqueue` shape; `department-claims-sync` queue registered in `server/src/services/queue/queueClient.ts`, processor in `registerWorkers.ts` |
+| `server/migrations/434_federated_capability_ownership_phase0.sql` | `departments`, `user_departments`, `department_claims_sync_jobs` tables + `trg_companies_create_portfolio` trigger + backfill |
+| `server/tests/integration/federated-capability-ownership-phase0.test.ts` | Real-Postgres proof: FK/CHECK rejection, trigger idempotency, `setActive` transition reporting, end-to-end claims-sync job processing |
 | `server/src/modules/identity/CompanyRepository.ts` | `create()` must persist `created_by`; id-generation fallback uses `crypto.randomUUID()`, not `uuid` |
 | `server/src/modules/auth/AuthRepository.ts` | `createCompany()` persists `created_by`; `createUser()` accepts a caller-supplied `id`; `setCompanyCreatedBy()` back-fills `created_by` after the user row exists |
 | `server/src/modules/auth/AuthController.ts` | `register()` pre-generates the new user's id only when also creating a new company, so it can become that company's `created_by` |
@@ -56,6 +61,7 @@ npm run verify:governed-features
 ## Related Skills
 
 - `adpa-capability-registry` — Phase 1, the ownership-registry sibling under the same packet
+- `adpa-capability-activation-lifecycle` — Phase 3, the state-machine built on top of the registry this packet feeds
 - `adpa-governed-feature-loop` — the process this packet follows
 - `adpa-projects-pillar7` — sibling tenant/portfolio scoping conventions
 - `adpa-compliance-layer-pillar4` — sibling dual-write / audit discipline
