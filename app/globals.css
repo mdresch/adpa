@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "./typeset.css";
+
+.typeset-docs {
+  --typeset-font-body: var(--font-space-grotesk);
+  --typeset-font-heading: var(--font-space-grotesk);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.6;
+  --typeset-flow: 1em;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
