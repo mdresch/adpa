@@ -122,10 +122,19 @@ beforeAll(async () => {
     let lastErr;
 
     for (let attempt = 1; attempt <= 10; attempt++) {
+      // idleTimeoutMillis is deliberately generous (not e.g. 1000ms), not a
+      // localhost-docker-era leftover: the client.connect()/release() below is
+      // a connectivity probe, and this pool is then handed back for real use
+      // (adminPool.query(...) calls) moments later. A too-short idle timeout
+      // destroys that probed connection before the first real query arrives,
+      // forcing pg to open a second physical connection to Azure in a hurry --
+      // which was observed to hang indefinitely against this server (unlike
+      // the first, unhurried connection, which always succeeded), stalling
+      // the whole test run on a pool that neither resolves nor rejects.
       const pool = new Pool({
         connectionString: url,
         connectionTimeoutMillis: 8000,
-        idleTimeoutMillis: 1000
+        idleTimeoutMillis: 30000
       });
 
       try {
@@ -261,9 +270,7 @@ afterAll(async () => {
 
   // Close the main pool
   if (internalPool) {
-      console.log(`[AFTERALL-DIAG] pool state before end(): total=${internalPool.totalCount} idle=${internalPool.idleCount} waiting=${internalPool.waitingCount}`);
-      await internalPool.end().catch((e) => console.log('[AFTERALL-DIAG] pool.end() rejected:', e.message));
-      console.log('[AFTERALL-DIAG] pool.end() resolved');
+      await internalPool.end().catch(() => {});
   }
 });
 
