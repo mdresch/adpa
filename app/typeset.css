@@ -3,7 +3,6 @@
  * https://ui.shadcn.com/docs/typeset.
  */
 
-@layer components {
   .typeset {
     --typeset-font-body: inherit;
     --typeset-font-heading: var(--font-heading);
@@ -12,9 +11,7 @@
     --typeset-leading: 1.75;
     --typeset-flow: 1.25em;
   }
-}
 
-@layer components {
   .typeset {
     font-family: var(--typeset-font-body);
     font-size: calc(var(--typeset-size) * 1.125);
@@ -487,4 +484,3 @@
     ) {
     margin-block-start: 0;
   }
-}
