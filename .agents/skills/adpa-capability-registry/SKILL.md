@@ -13,6 +13,8 @@ Sibling skill: [adpa-federated-capability-ownership](../adpa-federated-capabilit
 
 This skill also now covers the read-only HTTP lookup (`CapabilityRegistryRepository`/`CapabilityRegistryController`, `GET /api/v1/capability-registry/:moduleId/:portfolioId`) that Phase 2's .NET `TaskApprovalGate` calls to resolve a module's declared owner — the orchestrator's `GovernanceDbContext` is a physically separate Postgres database (Aspire-provisioned `governance-ledger`) and cannot query `capability_registry` directly. See `adpa-task-approval-gate` for the orchestrator-side consumer.
 
+**Phase 6 addition**: `POST /api/v1/capability-registry/:moduleId/:portfolioId/promote` — the first human-triggerable path to `promote_capability_status` anywhere in the codebase (previously only an automated cron job called it). Authenticated + department-membership/admin-authorized, unlike the sibling `GET`. See [the Phase 6 design spec](../../../docs/superpowers/specs/2026-07-12-federated-capability-ownership-phase6-design.md) and `adpa-capability-activation-lifecycle` for the stored procedure it calls.
+
 ## Invariants
 
 - Must always: scope `capability_registry` by `portfolio_id`, not `company_id`/`tenant_id` alone — activation is per-portfolio, matching Phase 0's identity scoping.
@@ -24,6 +26,8 @@ This skill also now covers the read-only HTTP lookup (`CapabilityRegistryReposit
 - Must never: treat this packet's reconciliation as the actual DB-side enforcement by itself — it's the pure decision logic. The live check now exists as separate operational scripts that call it: `seedCapabilityRegistry.ts` (`npm run seed:capability-registry`, inserts missing rows via `CapabilityRegistryRepository.insertMissing`, `ON CONFLICT DO NOTHING` so it never clobbers an assigned owner) and `checkCapabilityRegistryCoverage.ts` (`npm run check:capability-registry-coverage`, a CI/deploy-pipeline gate — deliberately **not** folded into `verify:governed-features`, see the next bullet).
 - Must never: extend `server/scripts/verify-governed-features.mjs` to do this reconciliation — that script is a static, filesystem-only checker with no DB access, and stays that way (CLAUDE.md documents `test:features`/`verify:governed-features` as fast and DB-free, required before every commit). `checkCapabilityRegistryCoverage.ts` is the DB-aware equivalent, kept as its own script for exactly this reason.
 - Must always: keep the `GET /api/v1/capability-registry/:moduleId/:portfolioId` lookup read-only and unauthenticated-by-design (no user JWT exists on this service-to-service call) — matches the existing no-auth-header convention already used by the orchestrator's other typed HttpClients (`GovernanceApiClient`, `IntelligenceClient`); trust is via the internal network boundary, not a credential.
+- Must always (Phase 6): keep `POST .../promote` authenticated and department-membership-authorized, unlike the `GET` — it's a real write path, not a service-to-service lookup. Resolve `(moduleId, portfolioId)` via `findFullByModuleAndPortfolio` (exposes `id`/`activationStatus`), not the original `findByModuleAndPortfolio` (kept unchanged since the orchestrator's `TaskApprovalGate` already depends on its exact shape).
+- Must never (Phase 6): treat this endpoint's `isOverride`/`overrideExpiresAt` handling as authorization. It mechanically passes them to `promote_capability_status`, which only checks they were *recorded* — see `adpa-capability-activation-lifecycle`'s own boundary note. Phase 2 task 4's "who may grant an override" check is still unbuilt.
 
 ## Interaction Rules
 
@@ -38,12 +42,14 @@ This skill also now covers the read-only HTTP lookup (`CapabilityRegistryReposit
 | `server/src/modules/capabilityRegistry/capabilityRegistryReconciliation.ts` | Pure logic: `reconcileCapabilityRegistry` (missing/orphaned rows), `buildCapabilityRegistryRow` (owner-column defaults), `getAttestationCadenceDays` (config-driven cadence) |
 | `server/migrations/433_capability_registry.sql` | Creates `capability_registry` (FK to `portfolio_governance`, `UNIQUE (module_id, portfolio_id)`) — DDL correctness itself is integration-test territory |
 | `server/src/__tests__/modules/federated-capability-ownership/capabilityRegistry.test.ts` | Contract Guards: REQ-CAP-001..006 |
-| `server/src/modules/capabilityRegistry/CapabilityRegistryRepository.ts` | DB-backed accessor: `findByModuleAndPortfolio` (scoped by both, never module_id alone), `listAll`, `insertMissing` (`ON CONFLICT (module_id, portfolio_id) DO NOTHING`) |
-| `server/src/modules/capabilityRegistry/CapabilityRegistryController.ts` / `routes.ts` | `GET /api/v1/capability-registry/:moduleId/:portfolioId` — Phase 2's only way to read `capability_registry` from the orchestrator |
+| `server/src/modules/capabilityRegistry/CapabilityRegistryRepository.ts` | DB-backed accessor: `findByModuleAndPortfolio` (scoped by both, never module_id alone), `findFullByModuleAndPortfolio` (Phase 6: adds `id`/`activationStatus`), `listAll`, `insertMissing` (`ON CONFLICT (module_id, portfolio_id) DO NOTHING`) |
+| `server/src/modules/capabilityRegistry/CapabilityRegistryController.ts` / `routes.ts` | `GET /api/v1/capability-registry/:moduleId/:portfolioId` (Phase 2's only way to read `capability_registry` from the orchestrator); `POST .../promote` (Phase 6: authenticated write path calling `promote_capability_status`) |
+| `server/src/modules/departments/UserDepartmentRepository.ts` (`isActiveMember`) | Phase 6: the authorization check backing `.../promote` — is this user an active member of a given department in a given portfolio |
 | `server/src/modules/capabilityRegistry/seedCapabilityRegistry.ts` | Live seed/reconciliation runner — cross-products the real manifest against `PortfolioRepository.listActiveIds()`, inserts missing rows. CLI: `npm run seed:capability-registry` (also chained into `migrate:dev`) |
 | `server/src/modules/capabilityRegistry/checkCapabilityRegistryCoverage.ts` | Live DB-aware coverage gate. CLI: `npm run check:capability-registry-coverage` — CI/deploy pipeline only, not the fast pre-push path |
 | `server/src/__tests__/modules/federated-capability-ownership/capabilityRegistryRepository.test.ts` | Contract Guards: REQ-CAP-007..008 |
 | `server/tests/integration/federated-capability-ownership-phase1.test.ts` | Real-Postgres proof: seeding, idempotency, owner-assignment survival, coverage-check detection |
+| `server/tests/integration/federated-capability-ownership-phase6.test.ts` | Real-Postgres proof: REQ-PHASE6-PROMOTE-001..007 — auth required, department-membership/admin authorization, illegal-transition 400, unknown-pair 404. Uses `jest.mock('.../middleware/auth', ...)` (same pattern as `OpenUIChatController.test.ts`) to bypass real Firebase verification; currently blocked by the same pre-existing ESM harness issue as the Phase 3/4 suites — verified instead via a standalone script calling the controller method directly |
 
 ## Commands
 

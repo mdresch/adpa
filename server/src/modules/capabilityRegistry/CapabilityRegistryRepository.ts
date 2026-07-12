@@ -11,6 +11,11 @@ export interface CapabilityRegistryDbRow {
   controlDefinitionOwnerDepartment: string | null;
 }
 
+export interface CapabilityRegistryFullRow extends CapabilityRegistryDbRow {
+  id: string;
+  activationStatus: string;
+}
+
 /**
  * Accessor for capability_registry (ADR-005 Phase 1). findByModuleAndPortfolio is
  * used by the .NET orchestrator's TaskApprovalGate (Phase 2) to resolve a module's
@@ -49,6 +54,39 @@ export class CapabilityRegistryRepository {
       functionalOwnerType: row.functional_owner_type,
       functionalOwnerDepartment: row.functional_owner_department,
       controlDefinitionOwnerDepartment: row.control_definition_owner_department
+    };
+  }
+
+  /**
+   * ADR-005 Phase 6: includes id + activation_status, which the read-only
+   * findByModuleAndPortfolio (consumed by the orchestrator) deliberately does
+   * not expose. Used by the new authenticated promote endpoint to resolve
+   * (moduleId, portfolioId) -> the row promote_capability_status needs.
+   */
+  async findFullByModuleAndPortfolio(
+    moduleId: string,
+    portfolioId: string
+  ): Promise<CapabilityRegistryFullRow | null> {
+    const result = await this.pool.query(
+      `SELECT id, module_id, portfolio_id, platform_operator, functional_owner_type,
+              functional_owner_department, control_definition_owner_department, activation_status
+       FROM capability_registry
+       WHERE module_id = $1 AND portfolio_id = $2`,
+      [moduleId, portfolioId]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      moduleId: row.module_id,
+      portfolioId: row.portfolio_id,
+      platformOperator: row.platform_operator,
+      functionalOwnerType: row.functional_owner_type,
+      functionalOwnerDepartment: row.functional_owner_department,
+      controlDefinitionOwnerDepartment: row.control_definition_owner_department,
+      activationStatus: row.activation_status
     };
   }
 

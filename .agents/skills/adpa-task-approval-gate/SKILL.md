@@ -11,6 +11,8 @@ description: Department-aware TaskApprovalGate in the .NET orchestrator (ADR-005
 
 This is `.NET` orchestrator work validated via the **AEV workflow** (`dotnet build -c Release`, orchestration boot, governance-invariant check) — not the Jest-based governed-feature loop, which doesn't cover `orchestrator/`. Depends on Phase 0 (`departments` claim shape) and Phase 1 (`capability_registry` row shape); see `adpa-federated-capability-ownership` and `adpa-capability-registry`.
 
+**Phase 6 addition (write-endpoint half, distinct from this gate)**: `CapabilityController.cs` + `CapabilityRegistryClient.PromoteAsync` are a *separate*, simpler proxy to Node's new authenticated `POST /api/v1/capability-registry/:moduleId/:portfolioId/promote` — not part of `TaskApprovalGate`'s JIT-approval flow, and not gating `BusinessCase`/`RtmAmendment` at all. It relays the caller's own bearer token to Node rather than doing its own claims-based authorization in the orchestrator (Node's `authenticateToken` + a real `user_departments` membership check is the actual enforcement point there). See [the Phase 6 design spec](../../../docs/superpowers/specs/2026-07-12-federated-capability-ownership-phase6-design.md).
+
 ## Invariants
 
 - Must always: read the caller's department membership from the validated JWT's `departments` claim (`DepartmentClaimsReader.Read`), never from `approval.DecidedBy` — that field is a display label persisted alongside the decision, not a security check.
@@ -39,6 +41,8 @@ This is `.NET` orchestrator work validated via the **AEV workflow** (`dotnet bui
 | `orchestrator/Adpa.Orchestrator/Clients/CapabilityRegistryClient.cs` | Typed HttpClient calling Node's `GET /api/v1/capability-registry/:moduleId/:portfolioId`; 5s timeout, fail-closed on any error |
 | `orchestrator/Adpa.Orchestrator/Controllers/RitualController.cs` | Both `EnsureJitApproval` call sites (`phase0/approve`, `rtm/apply-amendment`) now `await` and pass `User` |
 | `orchestrator/Adpa.Orchestrator/Program.cs` | `CapabilityRegistryClient` HttpClient registration (`CAPABILITY_REGISTRY_URL` env var, `localhost:5000` dev fallback) |
+| `orchestrator/Adpa.Orchestrator/Controllers/CapabilityController.cs` | Phase 6: `POST api/capability/{moduleId}/{portfolioId}/promote` — thin proxy, not `[Authorize]`-decorated (same reasoning as `phase0/approve`/`rtm/apply-amendment` above), relays the caller's bearer token per-request |
+| `orchestrator/Adpa.Orchestrator/Clients/CapabilityRegistryClient.cs` (`PromoteAsync`) | POSTs to Node's promote endpoint with a per-request `Authorization` header (never the shared `HttpClient`'s default headers); returns Node's raw `(statusCode, body)` rather than remodeling the response shape in C# |
 
 ## Commands
 

@@ -57,6 +57,23 @@ export class UserDepartmentRepository {
     return result.rows.map(mapRow);
   }
 
+  /**
+   * ADR-005 Phase 6: the authorization check that makes department membership
+   * meaningful for capability activation specifically -- distinct from
+   * TaskApprovalGate's own membership check (orchestrator-side, gates the
+   * older BusinessCase/RtmAmendment JIT approval concept, not
+   * capability_registry). Scoped by portfolio_id, never department name alone.
+   */
+  async isActiveMember(userId: string, portfolioId: string, department: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT 1 FROM user_departments
+       WHERE user_id = $1 AND portfolio_id = $2 AND department = $3 AND is_active = true
+       LIMIT 1`,
+      [userId, portfolioId, department]
+    );
+    return result.rows.length > 0;
+  }
+
   async listByUser(userId: string): Promise<UserDepartmentDbRow[]> {
     const result = await this.pool.query(
       `SELECT id, user_id, portfolio_id, department, department_role, is_active

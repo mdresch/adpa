@@ -61,4 +61,61 @@ public class CapabilityRegistryClient(HttpClient http)
 
         return payload?.Capability;
     }
+
+    public sealed class PromoteRequest
+    {
+        [JsonPropertyName("newStatus")]
+        public string NewStatus { get; set; } = string.Empty;
+
+        [JsonPropertyName("reason")]
+        public string Reason { get; set; } = string.Empty;
+
+        [JsonPropertyName("dracoVerdictId")]
+        public string? DracoVerdictId { get; set; }
+
+        [JsonPropertyName("isOverride")]
+        public bool IsOverride { get; set; }
+
+        [JsonPropertyName("overrideExpiresAt")]
+        public DateTimeOffset? OverrideExpiresAt { get; set; }
+    }
+
+    /// <summary>
+    /// ADR-005 Phase 6: proxies to Node's authenticated promote endpoint (the first
+    /// human-triggerable path to promote_capability_status anywhere in the codebase —
+    /// previously only an automated cron job called it). Relays the caller's own
+    /// bearer token (set on this specific request, never on the shared HttpClient's
+    /// default headers, since that's a DI-scoped instance reused across requests) so
+    /// Node's authenticateToken middleware validates the same underlying Firebase
+    /// identity this endpoint's own [Authorize] already accepted — a token relay, not
+    /// a synthesized credential.
+    ///
+    /// Returns the raw (status code, JSON body) from Node rather than remodeling its
+    /// response shape here — the caller (CapabilityController) passes both straight
+    /// through, so there's one place (Node) that defines what a successful/failed
+    /// promotion response looks like, not two.
+    /// </summary>
+    public async Task<(int StatusCode, string Body)> PromoteAsync(
+        string moduleId,
+        string portfolioId,
+        PromoteRequest request,
+        string? bearerToken,
+        CancellationToken cancellationToken = default)
+    {
+        using var httpRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/promote")
+        {
+            Content = JsonContent.Create(request)
+        };
+
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            httpRequest.Headers.TryAddWithoutValidation("Authorization", bearerToken);
+        }
+
+        var response = await http.SendAsync(httpRequest, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return ((int)response.StatusCode, body);
+    }
 }
