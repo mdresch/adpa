@@ -1,17 +1,19 @@
 ---
 name: adpa-capability-activation-lifecycle
-description: Module activation state machine for governed modules (ADR-005 Phases 3-4) — capability_registry.activation_status, promote_capability_status (including its DRACO verdict gate), the stored-procedure-only lockdown trigger, and the drift-detection mechanism (module_drift_sources / attach_module_drift_trigger). Load when touching activation_status, capability_activation_history, DRACO-gated activation, or wiring a module's config/control table into drift detection.
+description: Module activation state machine for governed modules (ADR-005 Phases 3-5) — capability_registry.activation_status, promote_capability_status (including its DRACO verdict gate), the stored-procedure-only lockdown triggers on both capability_registry and capability_activation_history, the drift-detection mechanism (module_drift_sources / attach_module_drift_trigger), and the activation-history reconciliation + job-liveness infrastructure. Load when touching activation_status, capability_activation_history, DRACO-gated activation, drift detection, or scheduled-job heartbeats.
 ---
 
 # ADPA Capability Activation Lifecycle
 
 ## Purpose
 
-`capability_registry` rows move through a real state machine — `draft → pending_department_approval → active → pending_re_approval → disabled` — instead of being a feature-flag-style toggle. Every transition is written through one stored procedure, `promote_capability_status`, which is also the only place a transition can be attempted, validated, and recorded (`capability_activation_history`) — modeled on `template-lifecycle`'s `promote_template_status` / `template_status_history` pattern (`server/migrations/000_baseline.sql` ~13036-13146 / ~7769-7781), with one deliberate deviation (see next section). Phase 4 layers a DRACO verdict gate onto the same procedure's `→active` path. See [the Phase 3 design spec](../../../docs/superpowers/specs/2026-07-11-federated-capability-ownership-phase3-design.md), [the Phase 4 design spec](../../../docs/superpowers/specs/2026-07-12-federated-capability-ownership-phase4-design.md), and [the implementation plan](../../../docs/implementation/FEDERATED_CAPABILITY_OWNERSHIP_IMPLEMENTATION_PLAN.md#phase-3-action-item-4-module-activation-lifecycle).
+`capability_registry` rows move through a real state machine — `draft → pending_department_approval → active → pending_re_approval → disabled` — instead of being a feature-flag-style toggle. Every transition is written through one stored procedure, `promote_capability_status`, which is also the only place a transition can be attempted, validated, and recorded (`capability_activation_history`) — modeled on `template-lifecycle`'s `promote_template_status` / `template_status_history` pattern (`server/migrations/000_baseline.sql` ~13036-13146 / ~7769-7781), with one deliberate deviation (see next section). Phase 4 layers a DRACO verdict gate onto the same procedure's `→active` path. Phase 5 adds tamper-evidence: `capability_activation_history` itself is now append-only-locked, a reconciliation sweep detects drift between `capability_registry.activation_status` and the history table, and both scheduled jobs record heartbeats so a silently-stopped detective control is itself detectable. See [the Phase 3](../../../docs/superpowers/specs/2026-07-11-federated-capability-ownership-phase3-design.md), [Phase 4](../../../docs/superpowers/specs/2026-07-12-federated-capability-ownership-phase4-design.md), and [Phase 5](../../../docs/superpowers/specs/2026-07-12-federated-capability-ownership-phase5-design.md) design specs, and [the implementation plan](../../../docs/implementation/FEDERATED_CAPABILITY_OWNERSHIP_IMPLEMENTATION_PLAN.md#phase-3-action-item-4-module-activation-lifecycle).
 
 **Deferred, not part of this skill's scope**:
 - The five-party "break-glass" escalation subsystem for structurally-deadlocked departments (Phase 3 plan task 6), Phase 2 task 4's `TaskApprovalGate` override path, and the override-expiry warning/revert half of the scheduled sweep. All three depend on something setting `capability_activation_history.is_override = true`, which nothing does yet.
 - Phase 4 plan task 1 (auto-enqueueing a DRACO review when a module transitions to `pending_department_approval`) and task 4 (per-finding accept/override attestation). **Confirmed scoping blocker, not just deferred for convenience**: DRACO's `runFullReview()` (`server/src/services/dracoService.ts`) requires a real `documents.id` — `draco_reviews.document_id`/`draco_overrides.document_id` both hard-FK to `documents`. There is no generic "review any artifact" mode, and no module has real config/control content to review yet (`module_drift_sources` is still empty). Resolving this needs one of: synthesizing a placeholder `documents` row per module, relaxing DRACO's schema to a generic subject reference, or some other explicit decision — not something to silently paper over when task 1 is eventually picked up.
+- Phase 5's `governance_ledger` (.NET orchestrator) write-lockdown. **Confirmed scoping blocker**: `governance_ledger` is schema for an external service (`RPAS.Governance.Api`) absent from this repo — there is no in-repo legitimate writer to gate a session-guard trigger through (unlike `capability_activation_history`, where `promote_capability_status` is exactly that writer). Revisit once a real writer exists.
+- Phase 5's content-hash comparison half of task 3 (comparing a live config hash against `capability_activation_history.config_snapshot_hash`) — nothing populates `config_snapshot_hash` yet, the same "no module has real config content" wall Phase 3/4 hit.
 
 When one of these is built, it should extend this skill, not duplicate it.
 
@@ -30,12 +32,16 @@ When one of these is built, it should extend this skill, not duplicate it.
 - Must always: no-op the drift trigger (not error) when the matching `capability_registry` row isn't currently `active`, or when the row doesn't carry a resolvable `module_id`/`portfolio_id` pair — a config edit on a non-active module isn't a failure worth surfacing here.
 - Must never: fold the attestation-lapse sweep's override-expiry half into this pass — `is_override`/`override_expires_at`/`warned_24h_at`/`warned_12h_at` columns exist on `capability_activation_history` (part of this packet's own schema), but nothing populates `is_override` yet, so a sweep reading it would always find zero rows. Build that sweep together with whichever feature starts setting `is_override = true`.
 - Must never: treat "shared-table storm" (one config-table change re-opening several modules' approvals at once) as N independent, unrelated transitions when investigating — it's visible today via `capability_activation_history` rows sharing a `changed_at`/reason; no separate alerting channel is wired (deferred hardening item, not core mechanism).
+- Must always (Phase 5): treat `capability_activation_history` as append-only, full stop — `UPDATE`/`DELETE` are rejected unconditionally, even for `promote_capability_status` itself (there is no legitimate reason to ever modify or remove a written row). `INSERT` is gated by its own dedicated session-guard variable (`adpa.allow_activation_history_write`), separate from `activation_status`'s own guard (`adpa.allow_activation_status_write`) — the two can't share one variable because `promote_capability_status` resets the `activation_status` guard to `'off'` *before* its `INSERT` into this table runs.
+- Must always (Phase 5): treat the reconciliation sweep (`activationHistoryReconciliation.ts`) and the append-only lockdown as deliberately redundant, not one-substitutes-for-the-other — the lockdown proves recorded entries weren't altered after the fact; the sweep is what would catch a hole in the lockdown itself that neither of us has thought of yet (a permission-model gap, a bug, a direct restore).
+- Must never (Phase 5): treat a `draft` capability with no `capability_activation_history` row as drift — it's expected, since `draft` is the pre-promotion default. Every other status with no history row (or a history row whose `new_status` disagrees) is drift.
+- Must always (Phase 5): record a heartbeat (`scheduled_job_heartbeats`, success or failure) on every run of both `capabilityAttestationJob` and `capabilityActivationReconciliationJob`. Liveness is cross-checked, not self-checked — `capabilityAttestationJob` checks the reconciliation job's staleness on its own hourly tick, rather than adding a third scheduled job whose own liveness would then need monitoring too.
 
 ## Interaction Rules
 
 - Depends on: `adpa-capability-registry` (Phase 1 — the table this packet adds `activation_status` to) and `adpa-task-approval-gate` (Phase 2 — the gate this state machine plugs into, per the plan's own sequencing note).
 - Must not break: Phase 1's `capability_registry` row shape (`UNIQUE (module_id, portfolio_id)`, owner columns) — this packet only adds a column and a lockdown trigger, it doesn't change existing columns' semantics.
-- New interaction tests required when: Phase 7 adds the `functional_owner_department NOT NULL` precondition — extends `promote_capability_status`'s validation step the same way Phase 4 did, and existing Phase 3/4 contract guards asserting "a legal, verdict-satisfying transition succeeds" must be re-verified against the further-tightened precondition, not assumed to still pass. Also when Phase 4 task 1 is eventually built — it must produce a `draco_reviews.id` this procedure's gate can consume as-is; no change to the gate itself should be needed, only to how a verdict ID gets created.
+- New interaction tests required when: Phase 7 adds the `functional_owner_department NOT NULL` precondition — extends `promote_capability_status`'s validation step the same way Phase 4 did, and existing Phase 3/4 contract guards asserting "a legal, verdict-satisfying transition succeeds" must be re-verified against the further-tightened precondition, not assumed to still pass. Also when Phase 4 task 1 is eventually built — it must produce a `draco_reviews.id` this procedure's gate can consume as-is; no change to the gate itself should be needed, only to how a verdict ID gets created. Also when Phase 2 task 4 / Phase 3 task 6 starts setting `is_override = true` — re-verify the append-only lockdown still permits `promote_capability_status`'s INSERT with those fields populated, not just the bare-minimum case Phase 5 tested.
 
 ## Key Files
 
@@ -49,14 +55,25 @@ When one of these is built, it should extend this skill, not duplicate it.
 | `server/src/__tests__/modules/federated-capability-ownership/attestationLapseCheck.test.ts` | Contract Guards: REQ-PHASE3-ATT-001..005 |
 | `server/tests/integration/federated-capability-ownership-phase3.test.ts` | Real-Postgres proof: lockdown rejection, legal/illegal transitions, terminal-state rejection, drift mechanism against a scratch table |
 | `server/tests/integration/federated-capability-ownership-phase4.test.ts` | Real-Postgres proof: REQ-PHASE4-DRACO-001..008 — verdict-required, verdict-must-exist, `PASS` needs no override, `CONDITIONAL_PASS`/`REJECT` both need one, override needs justification + expiry, non-`active` transitions unaffected. `draco_reviews` rows inserted directly via SQL (`document_id = NULL`, which the schema allows) — this tests the DB gate, not DRACO's board-review pipeline |
+| `server/migrations/437_capability_activation_history_lockdown.sql` | Append-only lockdown trigger on `capability_activation_history` (dedicated `adpa.allow_activation_history_write` guard); redefines `promote_capability_status` to set/reset that guard around its own INSERT; creates `scheduled_job_heartbeats` |
+| `server/src/modules/capabilityRegistry/activationHistoryReconciliation.ts` | Pure logic: `reconcileActivationHistory` — flags `capability_registry` rows whose `activation_status` disagrees with (or has no) matching latest `capability_activation_history` row |
+| `server/src/modules/capabilityRegistry/jobLivenessCheck.ts` | Pure logic: `findStaleJobs` — generic scheduled-job staleness check (>2x expected interval since last success), not capability-registry-specific but introduced here |
+| `server/src/jobs/capabilityActivationReconciliationJob.ts` | Scheduled sweep (every 30 minutes) running the reconciliation + recording its own heartbeat |
+| `server/src/__tests__/modules/federated-capability-ownership/activationHistoryReconciliation.test.ts` | Contract Guards: REQ-PHASE5-RECON-001..006 |
+| `server/src/__tests__/modules/federated-capability-ownership/jobLivenessCheck.test.ts` | Contract Guards: REQ-PHASE5-LIVE-001..006 |
+| `orchestrator/Adpa.Orchestrator/Migrations/20260712120000_AddGovernanceLedgerHashChain.cs` | .NET side: `PrevHash`/`Hash` columns + `governance_ledger_before_insert()` trigger, mirroring `audit_log_before_insert()`. **Compile-verified only** (`dotnet build -c Release`, 0 errors) — not applied against a live DB, no Docker/Aspire container reachable in the authoring session |
+| `orchestrator/Adpa.Orchestrator/Models/Governance/GovernanceLedgerRow.cs` | Adds `PrevHash`/`Hash` properties matching the migration |
 
 ## Commands
 
 ```powershell
 cd server
-npm run test:features -- federated-capability-ownership   # pure-logic regression (all Phase 0-4 unit tests)
+npm run test:features -- federated-capability-ownership   # pure-logic regression (all Phase 0-5 unit tests)
 npm run verify:governed-features
-npm run test:integration                                    # real Azure test DB — Phases 0-4's actual proof
+npm run test:integration                                    # real Azure test DB — Phases 0-5 Node-side proof
+
+cd orchestrator/Adpa.Orchestrator
+dotnet build -c Release                                     # compile-only check for the governance_ledger migration
 ```
 
 ## Related Skills
@@ -65,4 +82,4 @@ npm run test:integration                                    # real Azure test DB
 - `adpa-task-approval-gate` — Phase 2, the gate this packet's lifecycle plugs into
 - `adpa-federated-capability-ownership` — Phase 0, department identity underlying the eventual approval gate
 - `adpa-governed-feature-loop` — the process this packet follows
-- `adpa-aev-workflow` — required for the Phase 6/7 orchestrator work still ahead, and for whichever future work resolves Phase 4 task 1's DRACO-artifact scoping question
+- `adpa-aev-workflow` — required for the Phase 6/7 orchestrator work still ahead, for whichever future work resolves Phase 4 task 1's DRACO-artifact scoping question, and for actually applying/verifying the Phase 5 governance_ledger migration once a reachable orchestrator dev environment (Docker/Aspire) is available
