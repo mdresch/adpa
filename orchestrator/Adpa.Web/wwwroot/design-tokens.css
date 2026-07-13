@@ -1,0 +1,39 @@
+/*
+ * ADR-011: Governor Portal design system ("Humanist"). One token file, one
+ * source of truth -- every Components/Shared/*.razor.css file below reads
+ * from these custom properties rather than hardcoding its own colors, so a
+ * future palette adjustment happens here once, not once per component.
+ *
+ * --gp- prefix avoids colliding with Bootstrap's own --bs-* custom
+ * properties (app.css still loads Bootstrap 5.3.2 for layout primitives --
+ * this file only owns color/type/spacing tokens, not a Bootstrap
+ * replacement).
+ */
+:root {
+  --gp-font: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+
+  --gp-bg: #fbf8f3;
+  --gp-surface: #fffefb;
+  --gp-border: #ece4d6;
+  --gp-ink: #2b2620;
+  --gp-soft: #7a7266;
+
+  /* Decorative-only -- background blooms behind a card, never behind text. */
+  --gp-bloom-coral: #f0b8ae;
+  --gp-bloom-sky: #a9c7dd;
+
+  /* Semantic status colors stay at clearly separated hues, not variations
+     of one pastel -- these carry a real decision signal, not just mood. */
+  --gp-pending-bg: #fbe9cd;
+  --gp-pending-ink: #a5711c;
+  --gp-approve: #6f9e6b;
+  --gp-approve-bg: #e5f0e2;
+  --gp-approve-ink: #4f7a4c;
+  --gp-decline: #c9584a;
+  --gp-decline-bg: #fbe5e1;
+  --gp-decline-ink: #b8503f;
+  --gp-neutral-bg: #f2ede3;
+  --gp-neutral-ink: #8a8172;
+
+  --gp-justification-bg: #f8f3ea;
+}

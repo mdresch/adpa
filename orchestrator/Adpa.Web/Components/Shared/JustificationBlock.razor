@@ -1,0 +1,9 @@
+<p class="gp-justification">@ChildContent</p>
+
+@code {
+    /// <summary>ADR-011: visually distinguishes "what the requester wrote" (free text) from
+    /// "what the system recorded" (structured fields) via a soft inset background, rather than
+    /// rendering justification text as a plain paragraph indistinguishable from surrounding copy.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

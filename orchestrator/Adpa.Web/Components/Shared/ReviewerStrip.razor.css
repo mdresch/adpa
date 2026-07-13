@@ -1,0 +1,5 @@
+.gp-reviewer-strip {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}

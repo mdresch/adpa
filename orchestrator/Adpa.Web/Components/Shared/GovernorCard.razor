@@ -1,0 +1,17 @@
+<div class="gp-card-frame @(ShowBloom ? "gp-bloom" : "")">
+    <div class="gp-card">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    /// <summary>ADR-011: the card container. ShowBloom adds the decorative blurred gradient
+    /// circles behind the card (the nod to microsoft.ai's watercolor illustration) -- opt-in,
+    /// not default, since a dense list of many cards (e.g. a request history table) would drown
+    /// in blooms if every card had them; reserve it for single-focus review surfaces.</summary>
+    [Parameter]
+    public bool ShowBloom { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

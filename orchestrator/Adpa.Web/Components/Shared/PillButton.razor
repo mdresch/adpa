@@ -1,0 +1,45 @@
+@if (Href is not null)
+{
+    <a href="@Href" class="gp-btn gp-btn-@VariantClass">@ChildContent</a>
+}
+else
+{
+    <button type="@Type" class="gp-btn gp-btn-@VariantClass" disabled="@Disabled" @onclick="OnClick">
+        @ChildContent
+    </button>
+}
+
+@code {
+    /// <summary>ADR-011: the pill-shaped action button. Approve/Deny are the two decision-carrying
+    /// variants used across override and break-glass review -- kept distinct from generic Primary/
+    /// Secondary so a reviewer's eye is drawn to the decision, not just "a button".</summary>
+    public enum ButtonVariant { Primary, Secondary, Approve, Deny }
+
+    [Parameter]
+    public ButtonVariant Variant { get; set; } = ButtonVariant.Primary;
+
+    [Parameter]
+    public string Type { get; set; } = "button";
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>When set, renders as an anchor styled like a button instead of a button element --
+    /// for navigation actions (e.g. "View details"), not form submission.</summary>
+    [Parameter]
+    public string? Href { get; set; }
+
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private string VariantClass => Variant switch
+    {
+        ButtonVariant.Approve => "approve",
+        ButtonVariant.Deny => "deny",
+        ButtonVariant.Secondary => "secondary",
+        _ => "primary"
+    };
+}
