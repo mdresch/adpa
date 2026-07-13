@@ -19,6 +19,8 @@ This skill also now covers the read-only HTTP lookup (`CapabilityRegistryReposit
 
 **Phase 2 task 4 / Phase 3 task 6 addition**: this module's `routes.ts` also mounts the override request/approve/deny flow (`.../override/*`) and the break-glass exception flow (`.../exceptions/*`) — both authenticated, both calling `promote_capability_status` on success. The controllers/repositories/schema for these live in this same `server/src/modules/capabilityRegistry/` directory (`CapabilityOverrideController`, `CapabilityOverrideExceptionController`, migrations 440-443), but the actual state-machine reasoning (why a second signature, why break-glass, why the deadlock gate) belongs to `adpa-capability-activation-lifecycle` — see that skill for the full detail; this skill just notes that the routes exist here.
 
+**Orchestrator proxy addition (2026-07-13)**: all seven of these Node endpoints — `promote` plus the six override/exception ones above — are now proxied from the .NET orchestrator too, via `CapabilityController.cs`'s shared `Relay` helper and matching `CapabilityRegistryClient` methods (`RequestOverrideAsync`, `ApproveOverrideAsync`, `DenyOverrideAsync`, `RequestExceptionAsync`, `DecideExceptionReviewAsync`, `ActivateExceptionAsync`). This is what a Governor Portal page now has to call through once it has a real token to relay (see `adpa-governor-portal-auth`) — previously only `promote` had an orchestrator-side route at all.
+
 ## Invariants
 
 - Must always: scope `capability_registry` by `portfolio_id`, not `company_id`/`tenant_id` alone — activation is per-portfolio, matching Phase 0's identity scoping.

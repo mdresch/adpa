@@ -5,10 +5,11 @@ using Adpa.Orchestrator.Clients;
 namespace Adpa.Orchestrator.Controllers;
 
 /// <summary>
-/// ADR-005 Phase 6 (write-endpoint half): a thin proxy to Node's authenticated
-/// promote_capability_status endpoint. Distinct from RitualController, which handles the
-/// older BusinessCase/RtmAmendment ritual/JIT-approval concept -- this controller has no
-/// relationship to TaskApprovalGate's JIT approval flow at all.
+/// ADR-005 Phase 6 (write-endpoint half), extended by Phase 2 task 4 (override) and
+/// Phase 3 task 6 (break-glass): a thin proxy to Node's authenticated capability_registry
+/// endpoints. Distinct from RitualController, which handles the older BusinessCase/
+/// RtmAmendment ritual/JIT-approval concept -- this controller has no relationship to
+/// TaskApprovalGate's JIT approval flow at all.
 ///
 /// Deliberately not [Authorize]-decorated -- following the same reasoning already
 /// documented for RitualController's phase0/approve/rtm/apply-amendment ([Authorize]
@@ -18,6 +19,10 @@ namespace Adpa.Orchestrator.Controllers;
 /// presented (or none) straight through to Node, and Node's authenticateToken middleware
 /// is the actual, already-real enforcement point -- a missing/invalid token fails there
 /// with 401, the same fail-closed-by-construction shape TaskApprovalGate already uses.
+///
+/// Every action here follows the same shape: relay the caller's bearer token, call one
+/// Node endpoint, pass its raw (status code, JSON body) straight back -- Node is the one
+/// system that defines what success/failure looks like for these, not two.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -26,33 +31,81 @@ public sealed class CapabilityController(
     ILogger<CapabilityController> logger) : ControllerBase
 {
     [HttpPost("{moduleId}/{portfolioId}/promote")]
-    public async Task<IActionResult> Promote(
-        string moduleId,
-        string portfolioId,
+    public Task<IActionResult> Promote(
+        string moduleId, string portfolioId,
         [FromBody] CapabilityRegistryClient.PromoteRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "promote",
+            token => capabilityRegistry.PromoteAsync(moduleId, portfolioId, request, token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/override/request")]
+    public Task<IActionResult> RequestOverride(
+        string moduleId, string portfolioId,
+        [FromBody] CapabilityRegistryClient.OverrideRequestBody request,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "override/request",
+            token => capabilityRegistry.RequestOverrideAsync(moduleId, portfolioId, request, token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/override/{requestId}/approve")]
+    public Task<IActionResult> ApproveOverride(
+        string moduleId, string portfolioId, string requestId,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "override/approve",
+            token => capabilityRegistry.ApproveOverrideAsync(moduleId, portfolioId, requestId, token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/override/{requestId}/deny")]
+    public Task<IActionResult> DenyOverride(
+        string moduleId, string portfolioId, string requestId,
+        [FromBody] CapabilityRegistryClient.DenyRequestBody request,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "override/deny",
+            token => capabilityRegistry.DenyOverrideAsync(moduleId, portfolioId, requestId, request, token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/exceptions/request")]
+    public Task<IActionResult> RequestException(
+        string moduleId, string portfolioId,
+        [FromBody] CapabilityRegistryClient.OverrideRequestBody request,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "exceptions/request",
+            token => capabilityRegistry.RequestExceptionAsync(moduleId, portfolioId, request, token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/exceptions/{exceptionId}/reviews/{reviewId}/decide")]
+    public Task<IActionResult> DecideExceptionReview(
+        string moduleId, string portfolioId, string exceptionId, string reviewId,
+        [FromBody] CapabilityRegistryClient.ExceptionDecisionBody request,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "exceptions/decide",
+            token => capabilityRegistry.DecideExceptionReviewAsync(moduleId, portfolioId, exceptionId, reviewId, request, token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/exceptions/{exceptionId}/activate")]
+    public Task<IActionResult> ActivateException(
+        string moduleId, string portfolioId, string exceptionId,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "exceptions/activate",
+            token => capabilityRegistry.ActivateExceptionAsync(moduleId, portfolioId, exceptionId, token, cancellationToken));
+
+    private async Task<IActionResult> Relay(
+        string moduleId, string portfolioId, string action,
+        Func<string?, Task<(int StatusCode, string Body)>> call)
     {
         var bearerToken = Request.Headers.Authorization.ToString();
-
         (int StatusCode, string Body) result;
         try
         {
-            result = await capabilityRegistry.PromoteAsync(
-                moduleId, portfolioId, request,
-                string.IsNullOrWhiteSpace(bearerToken) ? null : bearerToken,
-                cancellationToken);
+            result = await call(string.IsNullOrWhiteSpace(bearerToken) ? null : bearerToken);
         }
         catch (Exception ex)
         {
             // Fail closed: a relay failure (timeout, network, Node unreachable) must not
-            // be mistaken for a successful promotion -- same reasoning TaskApprovalGate
+            // be mistaken for a successful call -- same reasoning TaskApprovalGate
             // already applies to its own capability-registry lookup failures.
-            logger.LogError(ex, "Capability promote relay failed for module={ModuleId} portfolio={PortfolioId}", moduleId, portfolioId);
+            logger.LogError(ex, "Capability {Action} relay failed for module={ModuleId} portfolio={PortfolioId}", action, moduleId, portfolioId);
             return StatusCode(StatusCodes.Status502BadGateway, new
             {
-                error = "Unable to reach the capability registry service; promotion not applied.",
+                error = "Unable to reach the capability registry service; the action was not applied.",
                 moduleId,
-                portfolioId
+                portfolioId,
+                action
             });
         }
 

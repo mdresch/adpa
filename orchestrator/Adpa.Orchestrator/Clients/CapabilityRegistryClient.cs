@@ -95,16 +95,68 @@ public class CapabilityRegistryClient(HttpClient http)
     /// through, so there's one place (Node) that defines what a successful/failed
     /// promotion response looks like, not two.
     /// </summary>
-    public async Task<(int StatusCode, string Body)> PromoteAsync(
+    public Task<(int StatusCode, string Body)> PromoteAsync(
         string moduleId,
         string portfolioId,
         PromoteRequest request,
         string? bearerToken,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/promote", request, bearerToken, cancellationToken);
+
+    // -------------------------------------------------------------------------------
+    // ADR-005 Phase 2 task 4 / Phase 3 task 6: override request/approve/deny and
+    // break-glass request/decide/activate. Same token-relay, same raw-passthrough
+    // reasoning as PromoteAsync above — these proxies did not exist until now (only
+    // promote had an orchestrator-side route; see adpa-governor-portal-auth's design
+    // spec for why that gap mattered once Adpa.Web gained real auth to relay).
+    // -------------------------------------------------------------------------------
+
+    public sealed class OverrideRequestBody
     {
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/promote")
+        [JsonPropertyName("requestedNewStatus")] public string RequestedNewStatus { get; set; } = string.Empty;
+        [JsonPropertyName("justification")] public string Justification { get; set; } = string.Empty;
+        [JsonPropertyName("dracoVerdictId")] public string? DracoVerdictId { get; set; }
+    }
+
+    public sealed class DenyRequestBody
+    {
+        [JsonPropertyName("reason")] public string Reason { get; set; } = string.Empty;
+    }
+
+    public sealed class ExceptionDecisionBody
+    {
+        [JsonPropertyName("decision")] public string Decision { get; set; } = string.Empty;
+        [JsonPropertyName("notes")] public string? Notes { get; set; }
+    }
+
+    public Task<(int StatusCode, string Body)> RequestOverrideAsync(
+        string moduleId, string portfolioId, OverrideRequestBody request, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/override/request", request, bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> ApproveOverrideAsync(
+        string moduleId, string portfolioId, string requestId, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/override/{Uri.EscapeDataString(requestId)}/approve", new { }, bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> DenyOverrideAsync(
+        string moduleId, string portfolioId, string requestId, DenyRequestBody request, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/override/{Uri.EscapeDataString(requestId)}/deny", request, bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> RequestExceptionAsync(
+        string moduleId, string portfolioId, OverrideRequestBody request, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/exceptions/request", request, bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> DecideExceptionReviewAsync(
+        string moduleId, string portfolioId, string exceptionId, string reviewId, ExceptionDecisionBody request, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/exceptions/{Uri.EscapeDataString(exceptionId)}/reviews/{Uri.EscapeDataString(reviewId)}/decide", request, bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> ActivateExceptionAsync(
+        string moduleId, string portfolioId, string exceptionId, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/exceptions/{Uri.EscapeDataString(exceptionId)}/activate", new { }, bearerToken, cancellationToken);
+
+    private async Task<(int StatusCode, string Body)> PostAsync<TRequest>(
+        string path, TRequest request, string? bearerToken, CancellationToken cancellationToken)
+    {
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, path)
         {
             Content = JsonContent.Create(request)
         };

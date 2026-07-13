@@ -28,7 +28,7 @@ Firebase is the identity provider (per [ADR-009](../../../docs/07-architecture/A
 
 - Depends on: the shared Firebase project already used by Node (`FIREBASE_PROJECT_ID`) and the orchestrator's JWT Bearer validation (`Program.cs`'s `AddJwtBearer` against `securetoken.google.com/{FIREBASE_PROJECT_ID}`) — this packet reuses that same project, not a new one.
 - Must not break: `Adpa.Orchestrator`'s existing non-`[Authorize]` posture (see `adpa-task-approval-gate`) — this packet doesn't touch the orchestrator's own `Program.cs` authentication setup at all.
-- New work required before ADR-005's override/break-glass functionality is reachable from `Adpa.Web`: six new `CapabilityController` proxy actions (override request/approve/deny, break-glass request/decide/activate) don't exist yet — only `promote` is proxied. This packet makes the *token* available; it doesn't add the missing routes.
+- **Resolved (2026-07-13)**: all six override/break-glass `CapabilityController` proxy actions now exist (see `adpa-capability-registry`'s orchestrator-proxy addition) — this packet's token is no longer stranded with nothing to call.
 - The pending visual redesign (explicitly deferred, not this packet's scope) will consume `FirebaseBearerTokenHandler`/`[Authorize]` as-is — new pages just inject `IHttpClientFactory.CreateClient("api")` the same way existing pages do, and get bearer-token attachment for free.
 
 ## Key Files
