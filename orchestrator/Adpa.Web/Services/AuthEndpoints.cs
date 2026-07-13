@@ -10,12 +10,19 @@ namespace Adpa.Web.Services;
 /// Login.razor's plain HTML form posts here as a normal browser navigation, and
 /// HttpContext.SignInAsync/SignOutAsync need a real HTTP response to write the
 /// Set-Cookie header on, which an interactive Blazor Server circuit can't provide.
+///
+/// The sign-in POST target is deliberately "/auth/login", NOT "/login" -- Login.razor
+/// itself owns the GET route "/login" (its @page directive), and MapRazorComponents
+/// registers a route match for that same literal path that isn't restricted to GET.
+/// A POST-only minimal API at the identical path collided with it (confirmed via a
+/// real request: AmbiguousMatchException, "The request matched multiple endpoints"),
+/// which 500'd every login attempt at the routing layer before any handler code ran.
 /// </summary>
 public static class AuthEndpoints
 {
     public static void MapFirebaseAuthEndpoints(this WebApplication app)
     {
-        app.MapPost("/login", async (HttpContext context, FirebaseAuthService firebaseAuth) =>
+        app.MapPost("/auth/login", async (HttpContext context, FirebaseAuthService firebaseAuth) =>
         {
             var form = await context.Request.ReadFormAsync();
             var email = form["email"].ToString();
@@ -43,7 +50,7 @@ public static class AuthEndpoints
             return Results.Redirect(IsSafeLocalReturnUrl(returnUrl) ? returnUrl : "/");
         });
 
-        app.MapPost("/logout", async (HttpContext context) =>
+        app.MapPost("/auth/logout", async (HttpContext context) =>
         {
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.Redirect("/login");

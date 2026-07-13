@@ -18,11 +18,13 @@
             }
 
             @* Deliberately a plain HTML form (no EditForm/@@onsubmit) posting to the
-               non-Blazor /login minimal API endpoint (see Program.cs) -- a real browser
-               POST navigation, not a SignalR circuit call, so HttpContext.SignInAsync
-               (which needs to write a Set-Cookie header on an actual response) works
-               regardless of this page's Blazor render mode. *@
-            <form method="post" action="/login">
+               non-Blazor /auth/login minimal API endpoint (see AuthEndpoints.cs) -- a
+               real browser POST navigation, not a SignalR circuit call, so
+               HttpContext.SignInAsync (which needs to write a Set-Cookie header on an
+               actual response) works regardless of this page's Blazor render mode.
+               MUST NOT be "/login" -- this page's own @@page "/login" route collides
+               with a same-path POST endpoint (confirmed: AmbiguousMatchException). *@
+            <form method="post" action="/auth/login">
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                 <div class="mb-3">
                     <label for="email" class="form-label small fw-semibold">Email</label>

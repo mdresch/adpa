@@ -18,7 +18,7 @@
                     @* Plain HTML button, deliberately not <PillButton> -- PillButton binds @onclick
                        unconditionally, which would attach a SignalR round-trip to what must stay a
                        genuine browser POST navigation (same reasoning as Login.razor's own form). *@
-                    <form method="post" action="/logout" class="gp-nav-form">
+                    <form method="post" action="/auth/logout" class="gp-nav-form">
                         <button type="submit" class="gp-btn gp-btn-secondary">Sign out</button>
                     </form>
                 </Authorized>
