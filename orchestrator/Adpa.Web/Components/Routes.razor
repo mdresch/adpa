@@ -1,6 +1,13 @@
+@* No shared LayoutComponentBase exists yet -- App.razor hardcodes the nav directly
+   around <Routes>, so DefaultLayout is intentionally omitted here rather than
+   introducing one as a side effect of adding auth. See ADR-009 design spec. *@
 <Router AppAssembly="@typeof(Routes).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" />
+        <AuthorizeRouteView RouteData="@routeData">
+            <NotAuthorized>
+                <RedirectToLogin />
+            </NotAuthorized>
+        </AuthorizeRouteView>
     </Found>
     <NotFound>
         <PageTitle>Not found</PageTitle>

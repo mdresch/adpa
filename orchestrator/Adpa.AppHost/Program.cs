@@ -5,6 +5,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // Resolve Core Attributes (G1-G4 Resilience)
 var firebaseProjectId = builder.Configuration["FIREBASE_PROJECT_ID"] ?? "adpa-dev";
+// ADR-009: the Firebase Web API key (same value as the Next.js frontend's
+// NEXT_PUBLIC_FIREBASE_API_KEY, a public client-config key, not a service-account
+// secret) that Adpa.Web needs for Identity Toolkit REST sign-in/refresh calls.
+var firebaseWebApiKey = builder.Configuration["FIREBASE_WEB_API_KEY"] ?? "";
 
 // 1. Data & Messaging Tier (Containerized Resources)
 // ---------------------------------------------------------------------------
@@ -91,7 +95,8 @@ var backend = builder.AddExecutable("adpa-backend", "pnpm", "../../server", "run
 
 // launchSettings.json already defines http://localhost:5006 — do not add a second endpoint named "http".
 var web = builder.AddProject<Projects.Adpa_Web>("webfrontend")
-    .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5008");
+    .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5008")
+    .WithEnvironment("FIREBASE_WEB_API_KEY", firebaseWebApiKey);
 web.WithExternalHttpEndpoints();
 web.WithReference(apiservice);
 
