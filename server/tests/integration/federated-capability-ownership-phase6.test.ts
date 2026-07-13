@@ -109,12 +109,20 @@ describe('ADR-005 Phase 6 integration: capability_registry promote endpoint', ()
     expect(response.body.lastTransition.new_status).toBe('pending_department_approval');
   });
 
-  it('allows an admin to promote regardless of department membership', async () => {
+  it('allows an admin to promote without being a department member themselves', async () => {
+    // ADR-005 Phase 7: the admin bypass only skips *this caller's own* department
+    // membership requirement -- it does not skip promote_capability_status's
+    // separate, DB-level check that the target department has *someone* active
+    // in this portfolio (Phase 7 task 3's structural-deadlock guard). So a
+    // Compliance member still needs to exist here, just not be the caller.
     const userId = await createTestUser();
+    const memberUserId = await createTestUser();
     mockUser = { id: userId, role: 'admin' };
     const app = createApp();
     const portfolioId = await createTestPortfolio();
     const moduleId = await createCapability(portfolioId, 'Compliance');
+    const departments = new UserDepartmentRepository(pool);
+    await departments.create({ userId: memberUserId, portfolioId, department: 'Compliance' });
 
     const response = await request(app)
       .post(`/api/v1/capability-registry/${moduleId}/${portfolioId}/promote`)
@@ -123,18 +131,17 @@ describe('ADR-005 Phase 6 integration: capability_registry promote endpoint', ()
     expect(response.status).toBe(200);
   });
 
-  it('rejects with 403 when the module has no assigned functional owner department, even for a member', async () => {
-    const userId = await createTestUser();
+  it('can no longer create a module with no assigned functional owner department at all (ADR-005 Phase 7 NOT NULL)', async () => {
+    // REQ-PHASE6-PROMOTE-005 was originally enforced by the controller's own
+    // null check (still present, see CapabilityRegistryController.promote) --
+    // Phase 7's migration 439 additionally makes this state impossible to
+    // reach in the first place, since functional_owner_department is now
+    // NOT NULL at the schema level. This proves the stronger guarantee exists;
+    // the controller's own 403 check is retained as defense in depth for a row
+    // that predates Phase 7's backfill/constraint, not exercised by this test.
     const portfolioId = await createTestPortfolio();
-    const moduleId = await createCapability(portfolioId, null);
-    mockUser = { id: userId, role: 'user' };
-    const app = createApp();
 
-    const response = await request(app)
-      .post(`/api/v1/capability-registry/${moduleId}/${portfolioId}/promote`)
-      .send({ newStatus: 'pending_department_approval', reason: 'submit' });
-
-    expect(response.status).toBe(403);
+    await expect(createCapability(portfolioId, null)).rejects.toThrow(/null value.*functional_owner_department|violates not-null constraint/i);
   });
 
   it('surfaces an illegal-transition rejection from the stored procedure as 400', async () => {

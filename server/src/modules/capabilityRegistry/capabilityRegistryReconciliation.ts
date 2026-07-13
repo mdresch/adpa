@@ -60,8 +60,10 @@ export function reconcileCapabilityRegistry(input: ReconciliationInput): Reconci
 }
 
 /**
- * REQ-CAP-004: applies Phase 1's documented defaults. Owner-department fields are never guessed
- * — they stay null until a business decision assigns them (see implementation plan Phase 1 task 3).
+ * REQ-CAP-004: applies Phase 1's documented defaults. Owner-department fields default to null
+ * here — this function stays a pure, business-decision-free builder; the actual assignment
+ * (Phase 7, moduleOwnerAssignments.ts) is passed in by the caller as an override, never
+ * hardcoded in this generic builder.
  */
 export function buildCapabilityRegistryRow(
   moduleId: string,

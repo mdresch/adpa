@@ -8,6 +8,12 @@
  * dracoService -- this packet tests the DB-level gate, not DRACO's own board
  * review pipeline. Each `it` runs inside a transaction that's rolled back
  * afterward (tests/setup/integration-setup.js).
+ *
+ * Phase 7 note: capability_registry.functional_owner_department is NOT NULL as
+ * of migration 439, and promote_capability_status now requires an active
+ * user_departments member in the capability's own portfolio for transitions to
+ * pending_department_approval/active -- createCapabilityPendingApproval sets
+ * both up, since this file predates Phase 7 and isn't testing that gate.
  */
 import { randomUUID } from 'crypto';
 import { pool } from '../../src/database/connection';
@@ -24,10 +30,22 @@ async function createTestPortfolio(): Promise<string> {
   return portfolioResult.rows[0].id;
 }
 
+async function addActiveDepartmentMember(portfolioId: string, department = 'IT'): Promise<void> {
+  const userResult = await pool.query(
+    `INSERT INTO users (email, password_hash, name) VALUES ($1, 'x', 'Test User') RETURNING id`,
+    [`test-${randomUUID()}@example.com`]
+  );
+  await pool.query(
+    `INSERT INTO user_departments (user_id, portfolio_id, department, department_role) VALUES ($1, $2, $3, 'member')`,
+    [userResult.rows[0].id, portfolioId, department]
+  );
+}
+
 async function createCapabilityPendingApproval(portfolioId: string): Promise<string> {
+  await addActiveDepartmentMember(portfolioId);
   const moduleId = `test-module-${randomUUID()}`;
   const result = await pool.query(
-    `INSERT INTO capability_registry (portfolio_id, module_id) VALUES ($1, $2) RETURNING id`,
+    `INSERT INTO capability_registry (portfolio_id, module_id, functional_owner_department) VALUES ($1, $2, 'IT') RETURNING id`,
     [portfolioId, moduleId]
   );
   const capabilityId = result.rows[0].id;
@@ -155,9 +173,10 @@ describe('ADR-005 Phase 4 integration: DRACO activation gate', () => {
   describe('regression: non-active transitions are unaffected by the DRACO gate', () => {
     it('draft -> pending_department_approval requires no verdict', async () => {
       const portfolioId = await createTestPortfolio();
+      await addActiveDepartmentMember(portfolioId);
       const moduleId = `test-module-${randomUUID()}`;
       const result = await pool.query(
-        `INSERT INTO capability_registry (portfolio_id, module_id) VALUES ($1, $2) RETURNING id`,
+        `INSERT INTO capability_registry (portfolio_id, module_id, functional_owner_department) VALUES ($1, $2, 'IT') RETURNING id`,
         [portfolioId, moduleId]
       );
       const capabilityId = result.rows[0].id;

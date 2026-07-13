@@ -1,17 +1,23 @@
 /**
  * Seed/reconciliation runner for capability_registry (ADR-005 Phase 1 task 3).
  * Cross-products every governed-features.manifest.json feature id against every
- * active portfolio, inserts a row (owner columns null — "which department owns
- * a module" is a business decision, never guessed here) for every missing pair,
- * and logs any orphaned row for a human to act on rather than deleting it
- * automatically. DB-injected so it's importable from both the CLI wrapper
- * (scripts/seed-capability-registry.ts) and integration tests.
+ * active portfolio, inserts a row for every missing pair, and logs any orphaned
+ * row for a human to act on rather than deleting it automatically. DB-injected
+ * so it's importable from both the CLI wrapper (scripts/seed-capability-registry.ts)
+ * and integration tests.
+ *
+ * Owner-department columns are resolved via moduleOwnerAssignments.ts (ADR-005
+ * Phase 7's real business decision), not left null — Phase 7's NOT NULL
+ * constraint on functional_owner_department means a new row inserted with no
+ * owner would fail outright, which is the point: a module can no longer enter
+ * this table unowned.
  */
 import { Pool } from 'pg';
 import manifest from '../../../governed-features.manifest.json';
 import { CapabilityRegistryRepository } from './CapabilityRegistryRepository';
 import { PortfolioRepository } from '../portfolio/PortfolioRepository';
 import { buildCapabilityRegistryRow, reconcileCapabilityRegistry } from './capabilityRegistryReconciliation';
+import { resolveModuleOwnerDepartments } from './moduleOwnerAssignments';
 import { childLogger } from '../../utils/logger';
 import { connectDatabase, getDatabasePool, getDatabasePoolSafe } from '../../database/connection';
 
@@ -42,7 +48,9 @@ export async function seedCapabilityRegistry(pool: Pool): Promise<SeedCapability
     existingRows
   });
 
-  const rowsToInsert = missingRows.map((row) => buildCapabilityRegistryRow(row.moduleId, row.portfolioId));
+  const rowsToInsert = missingRows.map((row) =>
+    buildCapabilityRegistryRow(row.moduleId, row.portfolioId, resolveModuleOwnerDepartments(row.moduleId))
+  );
   const inserted = await capabilityRepository.insertMissing(rowsToInsert);
 
   if (orphanedRows.length > 0) {

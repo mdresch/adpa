@@ -5,6 +5,7 @@ import {
   CapabilityRegistryRow,
   DEFAULT_ATTESTATION_CADENCE_DAYS
 } from '../../../modules/capabilityRegistry/capabilityRegistryReconciliation';
+import { resolveModuleOwnerDepartments } from '../../../modules/capabilityRegistry/moduleOwnerAssignments';
 import manifest from '../../../../governed-features.manifest.json';
 
 describe('federated-capability-ownership: capabilityRegistry', () => {
@@ -158,6 +159,38 @@ describe('federated-capability-ownership: capabilityRegistry', () => {
       });
       expect(result.missingRows).toHaveLength(manifestModuleIds.length * portfolioIds.length);
       expect(result.orphanedRows).toEqual([]);
+    });
+  });
+
+  // REQ-CAP-009 (ADR-005 Phase 7): the real owner-department business decision
+  describe('REQ-CAP-009: resolveModuleOwnerDepartments', () => {
+    it('assigns Compliance to the compliance and template-lifecycle packets', () => {
+      expect(resolveModuleOwnerDepartments('compliance').functionalOwnerDepartment).toBe('Compliance');
+      expect(resolveModuleOwnerDepartments('template-lifecycle').functionalOwnerDepartment).toBe('Compliance');
+    });
+
+    it('assigns Legal to the ip-governance packet', () => {
+      expect(resolveModuleOwnerDepartments('ip-governance').functionalOwnerDepartment).toBe('Legal');
+    });
+
+    it('defaults every other packet to IT, including ones not yet in the manifest', () => {
+      expect(resolveModuleOwnerDepartments('rag')).toEqual({
+        functionalOwnerDepartment: 'IT',
+        controlDefinitionOwnerDepartment: 'IT'
+      });
+      expect(resolveModuleOwnerDepartments('some-future-packet')).toEqual({
+        functionalOwnerDepartment: 'IT',
+        controlDefinitionOwnerDepartment: 'IT'
+      });
+    });
+
+    it('resolves a real owner for every current manifest packet (no packet silently falls through unassigned)', () => {
+      const manifestModuleIds = (manifest as { features: { id: string }[] }).features.map((f) => f.id);
+      for (const moduleId of manifestModuleIds) {
+        const assignment = resolveModuleOwnerDepartments(moduleId);
+        expect(assignment.functionalOwnerDepartment).toBeTruthy();
+        expect(assignment.controlDefinitionOwnerDepartment).toBeTruthy();
+      }
     });
   });
 });

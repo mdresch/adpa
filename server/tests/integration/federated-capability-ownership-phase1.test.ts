@@ -26,7 +26,7 @@ async function createTestPortfolio(): Promise<string> {
 }
 
 describe('ADR-005 Phase 1 integration: capability_registry seeding', () => {
-  it('inserts one row per manifest feature for a newly created portfolio, owner columns null', async () => {
+  it('inserts one row per manifest feature for a newly created portfolio, owner departments resolved per moduleOwnerAssignments', async () => {
     const portfolioId = await createTestPortfolio();
 
     const result = await seedCapabilityRegistry(pool);
@@ -37,7 +37,13 @@ describe('ADR-005 Phase 1 integration: capability_registry seeding', () => {
       [portfolioId]
     );
     expect(rows.rows.map((row) => row.module_id).sort()).toEqual([...moduleIds].sort());
-    expect(rows.rows.every((row) => row.functional_owner_department === null)).toBe(true);
+    // ADR-005 Phase 7: owner departments are real, not null -- compliance/ip-governance/
+    // template-lifecycle get their assigned department, everything else defaults to IT.
+    expect(rows.rows.every((row) => row.functional_owner_department !== null)).toBe(true);
+    const nonItRows = rows.rows.filter((row) => row.functional_owner_department !== 'IT');
+    expect(nonItRows.map((row) => `${row.module_id}:${row.functional_owner_department}`).sort()).toEqual(
+      ['compliance:Compliance', 'ip-governance:Legal', 'template-lifecycle:Compliance'].sort()
+    );
     expect(result.inserted).toBeGreaterThanOrEqual(moduleIds.length);
   });
 
@@ -75,7 +81,8 @@ describe('ADR-005 Phase 1 integration: capability_registry seeding', () => {
       const portfolioId = await createTestPortfolio();
       await seedCapabilityRegistry(pool);
       await pool.query(
-        `INSERT INTO capability_registry (portfolio_id, module_id) VALUES ($1, 'not-a-real-manifest-module')`,
+        `INSERT INTO capability_registry (portfolio_id, module_id, functional_owner_department)
+         VALUES ($1, 'not-a-real-manifest-module', 'IT')`,
         [portfolioId]
       );
 
