@@ -23,8 +23,16 @@
                HttpContext.SignInAsync (which needs to write a Set-Cookie header on an
                actual response) works regardless of this page's Blazor render mode.
                MUST NOT be "/login" -- this page's own @@page "/login" route collides
-               with a same-path POST endpoint (confirmed: AmbiguousMatchException). *@
-            <form method="post" action="/auth/login">
+               with a same-path POST endpoint (confirmed: AmbiguousMatchException).
+               data-enhance="false" is equally required: Blazor's blazor.web.js
+               intercepts ALL forms by default ("enhanced navigation"), including plain
+               HTML ones, and handles them via a fetch-based DOM patch instead of a real
+               browser navigation -- the server's 302 redirect then doesn't update the
+               address bar the way a native POST does (confirmed: login appeared to
+               "succeed" but the browser stayed on /auth/login). This attribute forces a
+               genuine full-page POST, the only way HttpContext.SignInAsync's cookie and
+               the subsequent redirect behave like a normal navigation. *@
+            <form method="post" action="/auth/login" data-enhance="false">
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                 <div class="mb-3">
                     <label for="email" class="form-label small fw-semibold">Email</label>

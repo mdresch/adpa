@@ -17,8 +17,11 @@
                     <span class="gp-nav-user">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
                     @* Plain HTML button, deliberately not <PillButton> -- PillButton binds @onclick
                        unconditionally, which would attach a SignalR round-trip to what must stay a
-                       genuine browser POST navigation (same reasoning as Login.razor's own form). *@
-                    <form method="post" action="/auth/logout" class="gp-nav-form">
+                       genuine browser POST navigation (same reasoning as Login.razor's own form).
+                       data-enhance="false" for the same reason as Login.razor's form -- without it,
+                       Blazor's enhanced navigation intercepts this POST via fetch and the resulting
+                       redirect doesn't behave like a real navigation. *@
+                    <form method="post" action="/auth/logout" class="gp-nav-form" data-enhance="false">
                         <button type="submit" class="gp-btn gp-btn-secondary">Sign out</button>
                     </form>
                 </Authorized>
