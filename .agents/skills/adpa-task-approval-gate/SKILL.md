@@ -29,7 +29,8 @@ This is `.NET` orchestrator work validated via the **AEV workflow** (`dotnet bui
 
 - Depends on: `adpa-federated-capability-ownership` (Phase 0 — the `departments` claim shape `DepartmentClaimsReader` parses) and `adpa-capability-registry` (Phase 1 — the `capability_registry` row shape `CapabilityRegistryClient` consumes, and the Node-side lookup endpoint itself).
 - Must not break the pre-existing JIT approval checks (scope, taskId, humanDecisionId/decidedBy presence, expiry window) — Phase 2 only adds a check, it doesn't remove or reorder the existing ones.
-- Deferred, not yet built: task 3's `iat`-vs-`tokensValidAfterTime` revocation check (needs Firebase Admin service-account credentials not yet provisioned) and task 4's override path (needs Phase 3's `capability_activation_history.override_expires_at` schema). Both are noted explicitly in the implementation plan, not silently dropped.
+- Deferred, not yet built: task 3's `iat`-vs-`tokensValidAfterTime` revocation check (needs Firebase Admin service-account credentials not yet provisioned).
+- **Resolved, but NOT in this file's code**: task 4's override path (2026-07-13) — confirmed before implementation that `TaskApprovalGate`/`EnsureJitApproval` has zero connection to `capability_registry` writes (it only ever calls `CapabilityRegistryClient.GetAsync`, read-only, to gate the unrelated `BusinessCase`/`RtmAmendment` ritual flow). Built instead entirely Node-side (`CapabilityOverrideController`, migration 440) — see `adpa-capability-activation-lifecycle`. Do not add override logic to `TaskApprovalGate.cs` expecting it to connect to this; it doesn't and, per that skill's Purpose section, deliberately doesn't need to.
 
 ## Key Files
 

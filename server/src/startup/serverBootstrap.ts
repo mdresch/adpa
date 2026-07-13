@@ -161,4 +161,17 @@ export async function initializeServerWithDependencyGraph(
   } else {
     console.log('⏭️  Skipping in-memory capability activation-history reconciliation sweep')
   }
+
+  // Initialize break-glass timeout-escalation sweep (ADR-005 Phase 3 task 6)
+  if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+    try {
+      const { scheduleBreakGlassEscalationSweep } = require('../jobs/breakGlassEscalationJob')
+      scheduleBreakGlassEscalationSweep()
+      console.log('✅ Break-glass timeout-escalation sweep scheduled (every 6 hours)')
+    } catch (err) {
+      console.warn('⚠️ Could not start break-glass timeout-escalation sweep', err)
+    }
+  } else {
+    console.log('⏭️  Skipping in-memory break-glass timeout-escalation sweep')
+  }
 }
