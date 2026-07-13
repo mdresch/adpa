@@ -14,6 +14,13 @@ const capabilityOverrideException = new CapabilityOverrideExceptionController();
  * Modular Capability Registry Routes
  * Mounted under /api/v1/capability-registry
  */
+// Governor Portal Approvals queue -- MUST be registered before the generic
+// GET /:moduleId/:portfolioId below, or Express would match "overrides"/
+// "exceptions" as a literal moduleId and "pending" as a literal portfolioId
+// (both are 2-segment GET routes; Express matches in registration order).
+router.get('/overrides/pending', authenticateToken, capabilityOverride.listPending);
+router.get('/exceptions/pending', authenticateToken, capabilityOverrideException.listPending);
+
 // Internal, service-to-service only (consumed by the .NET orchestrator's TaskApprovalGate,
 // ADR-005 Phase 2) — deliberately unauthenticated, see CapabilityRegistryController's own docs.
 router.get('/:moduleId/:portfolioId', capabilityRegistry.getByModuleAndPortfolio);

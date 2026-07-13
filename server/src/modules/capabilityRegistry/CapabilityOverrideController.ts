@@ -33,6 +33,25 @@ export class CapabilityOverrideController {
   private userDepartments = new UserDepartmentRepository(pool);
   private logger = childLogger({ component: 'CapabilityOverrideController' });
 
+  /**
+   * Feeds the Governor Portal's Approvals queue. Unlike request/approve/deny
+   * (scoped to one moduleId/portfolioId), this is a cross-capability list --
+   * see CapabilityOverrideRequestRepository.listPendingForUser for the
+   * admin-sees-all / member-sees-own-department scoping.
+   */
+  listPending = async (req: Request, res: Response) => {
+    try {
+      const requester = (req as any).user;
+      const role = requester?.role?.toLowerCase();
+      const isAdmin = role === 'admin' || role === 'super_admin';
+      const pending = await this.overrideRequests.listPendingForUser(requester.id, isAdmin);
+      res.json({ overrideRequests: pending });
+    } catch (error) {
+      this.logger.error('List pending override requests error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
   request = async (req: Request, res: Response) => {
     try {
       const { moduleId, portfolioId } = req.params;

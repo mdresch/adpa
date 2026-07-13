@@ -84,6 +84,37 @@ public sealed class CapabilityController(
         Relay(moduleId, portfolioId, "exceptions/activate",
             token => capabilityRegistry.ActivateExceptionAsync(moduleId, portfolioId, exceptionId, token, cancellationToken));
 
+    // Governor Portal Approvals queue -- cross-capability, so no moduleId/portfolioId
+    // to scope the error payload to (unlike every action above).
+    [HttpGet("overrides/pending")]
+    public Task<IActionResult> ListPendingOverrides(CancellationToken cancellationToken) =>
+        RelayList("overrides/pending", token => capabilityRegistry.ListPendingOverridesAsync(token, cancellationToken));
+
+    [HttpGet("exceptions/pending")]
+    public Task<IActionResult> ListPendingExceptions(CancellationToken cancellationToken) =>
+        RelayList("exceptions/pending", token => capabilityRegistry.ListPendingExceptionsAsync(token, cancellationToken));
+
+    private async Task<IActionResult> RelayList(string action, Func<string?, Task<(int StatusCode, string Body)>> call)
+    {
+        var bearerToken = Request.Headers.Authorization.ToString();
+        (int StatusCode, string Body) result;
+        try
+        {
+            result = await call(string.IsNullOrWhiteSpace(bearerToken) ? null : bearerToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Capability {Action} relay failed", action);
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                error = "Unable to reach the capability registry service.",
+                action
+            });
+        }
+
+        return ParseRelayResult(result);
+    }
+
     private async Task<IActionResult> Relay(
         string moduleId, string portfolioId, string action,
         Func<string?, Task<(int StatusCode, string Body)>> call)
@@ -109,6 +140,11 @@ public sealed class CapabilityController(
             });
         }
 
+        return ParseRelayResult(result);
+    }
+
+    private IActionResult ParseRelayResult((int StatusCode, string Body) result)
+    {
         if (string.IsNullOrWhiteSpace(result.Body))
         {
             return StatusCode(result.StatusCode);

@@ -46,6 +46,23 @@ export class CapabilityOverrideExceptionController {
   private userDepartments = new UserDepartmentRepository(pool);
   private logger = childLogger({ component: 'CapabilityOverrideExceptionController' });
 
+  /**
+   * Feeds the Governor Portal's Approvals queue. See
+   * CapabilityOverrideExceptionRepository.listPendingForUser for scoping
+   * (admin sees every open exception; a plain user sees only exceptions
+   * where they're a named reviewer with an undecided review row).
+   */
+  listPending = async (req: Request, res: Response) => {
+    try {
+      const requester = (req as any).user;
+      const pending = await this.exceptions.listPendingForUser(requester.id, isAdmin(requester));
+      res.json({ exceptions: pending });
+    } catch (error) {
+      this.logger.error('List pending override exceptions error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
   request = async (req: Request, res: Response) => {
     try {
       const { moduleId, portfolioId } = req.params;

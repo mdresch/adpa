@@ -153,6 +153,37 @@ public class CapabilityRegistryClient(HttpClient http)
         string moduleId, string portfolioId, string exceptionId, string? bearerToken, CancellationToken cancellationToken = default) =>
         PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/exceptions/{Uri.EscapeDataString(exceptionId)}/activate", new { }, bearerToken, cancellationToken);
 
+    // -------------------------------------------------------------------------------
+    // Governor Portal Approvals queue: list-pending, built to support ADR-011's
+    // redesign. Cross-capability (not scoped to one moduleId/portfolioId), so these
+    // hit different literal Node routes than everything above — see routes.ts's own
+    // note on why these must be registered before Node's generic GET
+    // /:moduleId/:portfolioId lookup.
+    // -------------------------------------------------------------------------------
+
+    public Task<(int StatusCode, string Body)> ListPendingOverridesAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
+        GetRelayAsync("/api/v1/capability-registry/overrides/pending", bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> ListPendingExceptionsAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
+        GetRelayAsync("/api/v1/capability-registry/exceptions/pending", bearerToken, cancellationToken);
+
+    /// <summary>Distinct name from the public GetAsync(moduleId, portfolioId, ...) above --
+    /// "string?" and "string" are the same type post-erasure, so a same-named overload
+    /// with only a nullability difference would be an ambiguous/duplicate signature.</summary>
+    private async Task<(int StatusCode, string Body)> GetRelayAsync(string path, string? bearerToken, CancellationToken cancellationToken)
+    {
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, path);
+
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            httpRequest.Headers.TryAddWithoutValidation("Authorization", bearerToken);
+        }
+
+        var response = await http.SendAsync(httpRequest, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return ((int)response.StatusCode, body);
+    }
+
     private async Task<(int StatusCode, string Body)> PostAsync<TRequest>(
         string path, TRequest request, string? bearerToken, CancellationToken cancellationToken)
     {

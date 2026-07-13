@@ -1,16 +1,19 @@
-@* No shared LayoutComponentBase exists yet -- App.razor hardcodes the nav directly
-   around <Routes>, so DefaultLayout is intentionally omitted here rather than
-   introducing one as a side effect of adding auth. See ADR-009 design spec. *@
+@* ADR-011: MainLayout now exists (Components/Layout/MainLayout.razor) -- the
+   deferral noted in ADR-009's design spec is resolved. Every routed page gets
+   the shared nav/chrome by default; a page can still override with its own
+   @layout directive if it ever needs to (none do today). *@
 <Router AppAssembly="@typeof(Routes).Assembly">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="@routeData">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
             <NotAuthorized>
                 <RedirectToLogin />
             </NotAuthorized>
         </AuthorizeRouteView>
     </Found>
     <NotFound>
-        <PageTitle>Not found</PageTitle>
-        <p role="alert" class="container mt-4">Sorry, there's nothing at this address.</p>
+        <LayoutView Layout="@typeof(Layout.MainLayout)">
+            <PageTitle>Not found</PageTitle>
+            <p role="alert">Sorry, there's nothing at this address.</p>
+        </LayoutView>
     </NotFound>
 </Router>

@@ -17,6 +17,11 @@ export interface CapabilityOverrideRequestRow {
   overrideExpiresAt: string | null;
 }
 
+export interface PendingOverrideRequestRow extends CapabilityOverrideRequestRow {
+  moduleId: string;
+  portfolioId: string;
+}
+
 function mapRow(row: any): CapabilityOverrideRequestRow {
   return {
     id: row.id,
@@ -34,6 +39,10 @@ function mapRow(row: any): CapabilityOverrideRequestRow {
     denialReason: row.denial_reason,
     overrideExpiresAt: row.override_expires_at
   };
+}
+
+function mapPendingRow(row: any): PendingOverrideRequestRow {
+  return { ...mapRow(row), moduleId: row.module_id, portfolioId: row.portfolio_id };
 }
 
 /**
@@ -107,5 +116,30 @@ export class CapabilityOverrideRequestRepository {
       [capabilityId]
     );
     return result.rows.map(mapRow);
+  }
+
+  /**
+   * Feeds the Approvals queue page. Scoped the same way the approve/deny
+   * endpoints already are: an admin sees every pending request; a plain user
+   * sees only requests raised against their OWN active department
+   * memberships (never someone else's department, and never cross-portfolio
+   * — matches this ADR's standing "portfolio_id and department, never
+   * department name alone" rule).
+   */
+  async listPendingForUser(userId: string, isAdmin: boolean): Promise<PendingOverrideRequestRow[]> {
+    const result = await this.pool.query(
+      `SELECT r.*, cr.module_id, cr.portfolio_id
+       FROM capability_override_requests r
+       JOIN capability_registry cr ON cr.id = r.capability_id
+       WHERE r.status = 'pending'
+         AND ($1::boolean = true OR EXISTS (
+           SELECT 1 FROM user_departments ud
+           WHERE ud.user_id = $2 AND ud.portfolio_id = cr.portfolio_id
+             AND ud.department = r.requested_by_department AND ud.is_active = true
+         ))
+       ORDER BY r.requested_at ASC`,
+      [isAdmin, userId]
+    );
+    return result.rows.map(mapPendingRow);
   }
 }

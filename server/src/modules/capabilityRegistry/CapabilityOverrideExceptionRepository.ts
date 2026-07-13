@@ -27,6 +27,12 @@ export interface OverrideExceptionReviewRow {
   createdAt: string;
 }
 
+export interface PendingExceptionRow extends CapabilityOverrideExceptionRow {
+  moduleId: string;
+  portfolioId: string;
+  reviews: OverrideExceptionReviewRow[];
+}
+
 function mapException(row: any): CapabilityOverrideExceptionRow {
   return {
     id: row.id,
@@ -162,5 +168,35 @@ export class CapabilityOverrideExceptionRepository {
        WHERE id = $1 AND exception_review_status = 'pending'`,
       [exceptionId]
     );
+  }
+
+  /**
+   * Feeds the Approvals queue page. An admin sees every still-open exception
+   * (pending or escalated -- disabled/active are resolved, not queue items
+   * anymore); a plain user sees only exceptions where THEY are a named
+   * reviewer with an undecided review row -- matches decideReview's own
+   * authorization (only the assigned reviewer, or an Internal Audit member
+   * proxying for external_auditor, may act on a review).
+   */
+  async listPendingForUser(userId: string, isAdmin: boolean): Promise<PendingExceptionRow[]> {
+    const result = await this.pool.query(
+      `SELECT DISTINCT e.*, cr.module_id, cr.portfolio_id
+       FROM capability_override_exceptions e
+       JOIN capability_registry cr ON cr.id = e.capability_id
+       WHERE e.exception_review_status IN ('pending', 'escalated')
+         AND ($1::boolean = true OR EXISTS (
+           SELECT 1 FROM override_exception_reviews rev
+           WHERE rev.exception_id = e.id AND rev.reviewer_user_id = $2 AND rev.decision IS NULL
+         ))
+       ORDER BY e.raised_at ASC`,
+      [isAdmin, userId]
+    );
+
+    const exceptions: PendingExceptionRow[] = [];
+    for (const row of result.rows) {
+      const reviews = await this.listReviews(row.id);
+      exceptions.push({ ...mapException(row), moduleId: row.module_id, portfolioId: row.portfolio_id, reviews });
+    }
+    return exceptions;
   }
 }
