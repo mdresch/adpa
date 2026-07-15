@@ -59,6 +59,7 @@ intelligence.WithReference(messaging);
 
 var apiservice = builder.AddProject<Projects.Adpa_Orchestrator>("apiservice")
     .WithHttpEndpoint(port: 5002, name: "http")
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
     .WithEnvironment("FIREBASE_PROJECT_ID", firebaseProjectId)
     .WithEnvironment("AI_PROVIDER", "google"); // High-integrity default for RPAS stabilization
 
@@ -88,6 +89,13 @@ var backend = builder.AddExecutable("adpa-backend", "pnpm", "../../server", "run
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otlpHttpEndpoint)
     .WithEnvironment("OTEL_SERVICE_NAME", "adpa-backend")
     .WithEnvironment("TRACING_ENABLED", "true");
+
+// CapabilityRegistryClient (Adpa.Orchestrator) relays to this backend's capability_registry
+// endpoints. Feeds its CAPABILITY_REGISTRY_URL config key directly with the backend's real
+// resolved endpoint -- ExecutableResource doesn't satisfy WithReference's IResourceWithConnectionString
+// constraint, so plain hostname-based service discovery ("http://adpa-backend") isn't an option here;
+// without this, every relay call 502s (CapabilityController.Relay/RelayList).
+apiservice.WithEnvironment("CAPABILITY_REGISTRY_URL", backend.GetEndpoint("http"));
 
 // ---------------------------------------------------------------------------
 // 5. Experience Tier (Management Interface)
