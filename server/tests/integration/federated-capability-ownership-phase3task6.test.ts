@@ -132,6 +132,52 @@ describe('ADR-005 Phase 3 task 6 integration: break-glass exceptions', () => {
     expect(capability.rows[0].activation_status).toBe('disabled');
   });
 
+  it('rejects activation from an admin with no relationship to the target portfolio', async () => {
+    const superAdminId = await createTestUser('super_admin');
+    const adminId = await createTestUser('admin');
+    const portfolioId = await createTestPortfolio();
+    const moduleId = await createCapability(portfolioId);
+
+    mockUser = { id: superAdminId, role: 'super_admin' };
+    const app = createApp();
+    const created = await request(app)
+      .post(`/api/v1/capability-registry/${moduleId}/${portfolioId}/exceptions/request`)
+      .send({ requestedNewStatus: 'pending_department_approval', justification: 'emergency' });
+    const exceptionId = created.body.exception.id;
+
+    mockUser = { id: adminId, role: 'admin' };
+    const response = await request(app)
+      .post(`/api/v1/capability-registry/${moduleId}/${portfolioId}/exceptions/${exceptionId}/activate`)
+      .send({});
+
+    expect(response.status).toBe(403);
+  });
+
+  it("allows activation from an admin whose own company owns the target portfolio", async () => {
+    const superAdminId = await createTestUser('super_admin');
+    const adminId = await createTestUser('admin');
+    const portfolioId = await createTestPortfolio();
+    const moduleId = await createCapability(portfolioId);
+
+    const portfolioRow = await pool.query(`SELECT company_id FROM portfolio_governance WHERE id = $1`, [portfolioId]);
+    await pool.query(`UPDATE users SET company_id = $1 WHERE id = $2`, [portfolioRow.rows[0].company_id, adminId]);
+
+    mockUser = { id: superAdminId, role: 'super_admin' };
+    const app = createApp();
+    const created = await request(app)
+      .post(`/api/v1/capability-registry/${moduleId}/${portfolioId}/exceptions/request`)
+      .send({ requestedNewStatus: 'pending_department_approval', justification: 'emergency' });
+    const exceptionId = created.body.exception.id;
+
+    mockUser = { id: adminId, role: 'admin' };
+    const response = await request(app)
+      .post(`/api/v1/capability-registry/${moduleId}/${portfolioId}/exceptions/${exceptionId}/activate`)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.capability.activationStatus).toBe('pending_department_approval');
+  });
+
   it('rejects activation from a non-super_admin caller', async () => {
     const superAdminId = await createTestUser('super_admin');
     const plainUserId = await createTestUser('user');

@@ -32,6 +32,27 @@ function isAdmin(user: any): boolean {
 }
 
 /**
+ * Whether `userId` has a real relationship to `portfolioId` -- their own
+ * company is the one that owns it (users.company_id -> portfolio_governance.company_id).
+ * Used to scope a plain 'admin' caller's break-glass activation to portfolios
+ * they actually belong to; 'super_admin' is deliberately left unscoped for now
+ * (see docs/implementation/FEDERATED_CAPABILITY_OWNERSHIP_IMPLEMENTATION_PLAN.md,
+ * Open Question 1(b) -- narrowing super_admin's own cross-tenant reach is a
+ * separate, larger decision, not made here).
+ */
+async function hasPortfolioRelationship(userId: string, portfolioId: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM public.users u
+       JOIN public.portfolio_governance pg ON pg.company_id = u.company_id
+       WHERE u.id = $1 AND pg.id = $2
+     ) AS has_relationship`,
+    [userId, portfolioId]
+  );
+  return result.rows[0]?.has_relationship === true;
+}
+
+/**
  * ADR-005 Phase 3 task 6: structural-deadlock break-glass, the substitute for
  * Phase 2 task 4's normal override when the target department has fewer than
  * two active members in the capability's own portfolio. Request-then-pickup:
@@ -229,8 +250,23 @@ export class CapabilityOverrideExceptionController {
       const { moduleId, portfolioId, exceptionId } = req.params;
 
       const caller = (req as any).user;
-      if (!isAdmin(caller)) {
-        return res.status(403).json({ error: 'Only a Super Admin may pick up and activate a break-glass exception.' });
+      const callerRole = caller?.role?.toLowerCase();
+
+      if (callerRole !== 'super_admin') {
+        if (callerRole !== 'admin') {
+          return res.status(403).json({ error: 'Only a Super Admin may pick up and activate a break-glass exception.' });
+        }
+
+        // 'admin' is not documented as cross-tenant the way 'super_admin' is
+        // (server/src/middleware/auth.ts:260-264 grants both the same blanket
+        // isAdmin bypass today -- exactly the gap flagged in external review:
+        // an admin from Company A could otherwise activate a module in
+        // Company B's portfolio). Require a real relationship to the target
+        // portfolio before letting an admin (not super_admin) proceed.
+        const related = await hasPortfolioRelationship(caller.id, portfolioId);
+        if (!related) {
+          return res.status(403).json({ error: 'Admin has no relationship to this portfolio.' });
+        }
       }
 
       const capability = await this.capabilityRepository.findFullByModuleAndPortfolio(moduleId, portfolioId);
