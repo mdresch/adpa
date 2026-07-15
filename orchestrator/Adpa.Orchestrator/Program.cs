@@ -117,9 +117,14 @@ builder.Services.AddHttpClient<IntelligenceClient>(client =>
 
 builder.Services.AddHttpClient<CapabilityRegistryClient>(client =>
 {
+    // codacy-disable-next-line
+    // Not a public-facing URL -- adpa-backend is an internal Aspire service-discovery
+    // hostname reached only from inside the orchestrator's own network boundary, same
+    // trust model already documented for GovernanceApiClient/IntelligenceClient above.
     var capabilityRegistryUrl = builder.Configuration["CAPABILITY_REGISTRY_URL"] ?? "http://adpa-backend";
     // Fallback for local debugging without service discovery — matches the Express
     // backend's Aspire-assigned dev port (Adpa.AppHost: adpa-backend, PORT=5000).
+    // codacy-disable-next-line
     if (builder.Environment.IsDevelopment() && capabilityRegistryUrl == "http://adpa-backend")
     {
         capabilityRegistryUrl = "http://localhost:5000";

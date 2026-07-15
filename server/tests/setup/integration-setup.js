@@ -35,7 +35,10 @@ if (!testDbName.startsWith('test_db_worker_')) {
 process.env.DATABASE_URL = testDbUrl;
 process.env.NODE_ENV = 'test';
 process.env.DB_MAX_RETRIES_PER_METHOD = '5';
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // Azure's cert chain needs this the same way run-migrations.ts already sets it
+// codacy-disable-next-line
+// Test-only harness talking to the disposable Azure test DB (see testDbUrl above),
+// never production -- run-migrations.ts sets this same flag for the same cert-chain reason.
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 // Mock Langfuse to avoid dynamic import / experimental-vm-modules issues
 jest.mock('langfuse', () => ({
@@ -116,6 +119,10 @@ jest.mock('@adobe/pdfservices-node-sdk', () => ({}));
 // src/server.ts's morphic routes are required. Only createId is actually used
 // (lib/morphic/db/schema.ts's generateId()); the rest are stubbed for any other
 // consumer further down the require chain.
+// codacy-disable-next-line
+// Math.random() here only fabricates a placeholder string for a mocked ID
+// generator in test setup -- never used as a real identifier or for anything
+// security-sensitive, so cryptographic strength is irrelevant.
 jest.mock('@paralleldrive/cuid2', () => ({
   createId: () => `mock-cuid-${Math.random().toString(36).slice(2)}`,
   init: () => () => `mock-cuid-${Math.random().toString(36).slice(2)}`,

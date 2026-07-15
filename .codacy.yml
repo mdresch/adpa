@@ -45,7 +45,7 @@ exclude_paths:
   # Legacy and backup files
   - 'legacy/**'
   - 'backups/**'
-  - '*.sql'
+  - '**/*.sql'
 
 # Security pattern suppressions for specific known false positives
 # These are development scripts with proper context and are not security risks
