@@ -110,64 +110,29 @@ export class CapabilityOverrideRequestRepository {
     return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
   }
 
-  /** ADR-012 Action Item 4: same transactional audit coverage as create() -- see auditLogCoverage.ts. */
+  /**
+   * ADR-012 PR6b: delegates entirely to decide_capability_request (migration 445) --
+   * the procedure performs its own UPDATE and its own audit_log insert atomically in
+   * one DB call, so there's no TS-managed transaction or bare UPDATE left here to get
+   * wrong. p_reason is NULL for an approval (this method never took a reason param).
+   */
   async markApproved(id: string, approvedBy: string, approvedByDepartment: string, overrideExpiresAt: Date): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1`, [id]);
-      const result = await client.query(
-        `UPDATE capability_override_requests
-         SET status = 'approved', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, override_expires_at = $4
-         WHERE id = $1
-         RETURNING *`,
-        [id, approvedBy, approvedByDepartment, overrideExpiresAt]
-      );
-      await insertAuditLogDigest(client, {
-        tableName: 'capability_override_requests',
-        rowId: id,
-        action: 'approve',
-        actorUserId: approvedBy,
-        oldRow: before.rows[0],
-        newRow: result.rows[0]
-      });
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    await this.pool.query(`SELECT decide_capability_request($1, 'approved', $2, $3, NULL, $4)`, [
+      id,
+      approvedBy,
+      approvedByDepartment,
+      overrideExpiresAt
+    ]);
   }
 
-  /** ADR-012 Action Item 4: same transactional audit coverage as create() -- see auditLogCoverage.ts. */
+  /** ADR-012 PR6b: same delegation as markApproved -- see that method's doc comment. */
   async markDenied(id: string, deniedBy: string, deniedByDepartment: string, denialReason: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1`, [id]);
-      const result = await client.query(
-        `UPDATE capability_override_requests
-         SET status = 'denied', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, denial_reason = $4
-         WHERE id = $1
-         RETURNING *`,
-        [id, deniedBy, deniedByDepartment, denialReason]
-      );
-      await insertAuditLogDigest(client, {
-        tableName: 'capability_override_requests',
-        rowId: id,
-        action: 'deny',
-        actorUserId: deniedBy,
-        oldRow: before.rows[0],
-        newRow: result.rows[0]
-      });
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    await this.pool.query(`SELECT decide_capability_request($1, 'denied', $2, $3, $4, NULL)`, [
+      id,
+      deniedBy,
+      deniedByDepartment,
+      denialReason
+    ]);
   }
 
   /**
