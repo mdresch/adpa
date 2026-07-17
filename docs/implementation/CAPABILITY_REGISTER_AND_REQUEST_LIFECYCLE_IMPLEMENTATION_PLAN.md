@@ -144,11 +144,11 @@ Action Item 6 covers giving a request a full lifecycle (raise → pending → de
    -- (approved_by IS DISTINCT FROM requested_by) forbids recording the
    -- withdrawer there, and the withdrawer IS the requester by definition.
    ```
-2. Stored procedure `decide_capability_request(request_id, decision, decided_by, decided_by_department, reason, override_expires_at)` where `decision IN ('approved', 'denied', 'withdrawn')`, intended to become (in PR6c) the **only** permitted writer of `capability_override_requests.status`:
+2. Stored procedure `decide_capability_request(request_id, decision, decided_by, decided_by_department, reason, override_expires_at)` where `decision IN ('approved', 'denied', 'withdrawn')`, `SECURITY DEFINER` with a pinned `search_path` (so it still works once PR6c's trigger is enforcing, the same reasoning `promote_capability_status` establishes for `activation_status`), intended to become (in PR6c) the **only** permitted writer of `capability_override_requests.status`:
    - For `withdrawn`: enforce `decided_by = requested_by` (the narrower, requester-only check — department membership is irrelevant here, unlike every other action in this ADR) and `status = 'pending'` at time of transition.
    - For `approved`/`denied`: same two-distinct-department-member check the app layer already does (ADR-005 Phase 2 task 4's rule), now also enforced here as defense in depth.
    - Performs the `audit_log` insert itself, using PR3's canonicalization/digest function — same transaction by construction, no transaction-client plumbing through repositories required.
-3. Contract guard: calling `decide_capability_request` directly (e.g. via a raw test query) transitions `status` correctly for all three decisions and writes a matching `audit_log` row; the existing `markApproved`/`markDenied` contract guards still pass unchanged (they don't call the procedure yet, and shouldn't need to).
+3. Contract guard: real-Postgres verification (mocked-pool can't meaningfully test a stored procedure's own logic) that calling `decide_capability_request` directly transitions `status` correctly for all three decisions and writes a matching `audit_log` row, plus the negative cases (non-requester withdraw, self-approval, non-member approval, already-decided request) all raise the expected exception. `server/tests/integration/`'s shared harness is still blocked repo-wide (see PR2/PR3's notes) — verified via a standalone script (`server/scripts/verify-decide-capability-request.ts`, transaction-wrapped and always rolled back, safe to run against a real shared database) instead, matching the precedent `adpa-capability-activation-lifecycle`'s own Phase 6/7 suites already set for this exact blocker. The existing `markApproved`/`markDenied` contract guards still pass unchanged (they don't call the procedure yet, and shouldn't need to).
 
 ### PR6b — Migrate markApproved/markDenied to the procedure (Action Item 6, refactor)
 
@@ -161,15 +161,18 @@ Action Item 6 covers giving a request a full lifecycle (raise → pending → de
 2. Land this in isolation from unrelated concurrent work — confirm the existing `federated-capability-ownership` contract guards pass unchanged both before starting and after landing, per the execution-strategy note above.
 3. Contract guard: `markApproved`/`markDenied`'s existing contract guards pass unchanged after the migration to the procedure; a test asserting both still work correctly while `UPDATE` remains granted (i.e. this PR does not yet depend on PR6c).
 
-### PR6c — Revoke UPDATE grant (Action Item 6, write-lockdown)
+### PR6c — Trigger + guard-variable lockdown (Action Item 6, write-lockdown)
 
-**Depends on**: PR6b (both existing decision paths must already be calling the procedure before direct `UPDATE` is cut off, or they'd break).
+**Depends on**: PR6b (both existing decision paths must already be calling the procedure before the trigger starts enforcing, or they'd break).
 
-**Objective**: the one-way door — make `decide_capability_request` the *only* way `capability_override_requests.status` can change, closing the gap ADR-012 §D identifies (this column has never been DB-enforced, unlike `activation_status`).
+**Objective**: the one-way door — make `decide_capability_request` the *only* way `capability_override_requests`'s decision columns can change, closing the gap ADR-012 §D identifies (these columns have never been DB-enforced, unlike `activation_status`).
+
+**Correction (2026-07-17, caught during PR6a's implementation)**: an earlier draft of this task called for `REVOKE UPDATE ... FROM <app role>`. Verified against `adpa-capability-activation-lifecycle`'s own documented invariant for `activation_status`'s existing lockdown — the exact precedent this task is supposed to mirror — and confirmed it is **not** `REVOKE`-based: this app connects to Postgres via one `DATABASE_URL`/role for both migrations and runtime, with no separate low-privilege app role to revoke from without rewiring deployment credentials (that invariant's own words, grepped-and-confirmed against `000_baseline.sql` and every migration file: zero `REVOKE` hits anywhere in this codebase). `activation_status`'s real mechanism — and this task's corrected one — is a `BEFORE UPDATE` trigger checking a session-local guard variable that only the sanctioned procedure sets, mirroring `guard_capability_registry_activation_status` exactly.
 
 **Tasks**:
-1. `REVOKE UPDATE (status, approved_by, approved_by_department, decided_at, denial_reason, withdrawn_at) ON capability_override_requests FROM <app role>`.
-2. Contract guard: a direct `UPDATE capability_override_requests SET status = ...` is rejected by DB permissions (real-Postgres test, mirroring ADR-005 Phase 3 task 4's equivalent guard for `activation_status`); `markApproved`/`markDenied`'s contract guards still pass unchanged now that the grant is gone (proving PR6b's migration was complete — nothing was still relying on direct `UPDATE`).
+1. Migration adding `guard_capability_override_requests_decision_columns()` (a `BEFORE UPDATE` trigger function checking whether any of `status`/`approved_by`/`approved_by_department`/`decided_at`/`denial_reason`/`withdrawn_at`/`override_expires_at` changed, and if so, requiring `current_setting('adpa.allow_capability_override_decision_write', true) = 'on'`, else `RAISE EXCEPTION`) and its `BEFORE UPDATE ON capability_override_requests` trigger.
+2. `decide_capability_request` (PR6a) updated to `PERFORM set_config('adpa.allow_capability_override_decision_write', 'on', true)` immediately before its own `UPDATE`, and back to `'off'` immediately after — same "close the bypass window right after the one sanctioned write" reasoning `promote_capability_status` already establishes for `activation_status`'s guard.
+3. Contract guard: real-Postgres verification (same standalone-script pattern as PR6a) that a direct `UPDATE capability_override_requests SET status = ...` (bypassing the procedure) is rejected by the trigger; `markApproved`/`markDenied`'s contract guards still pass unchanged now that the guard is active (proving PR6b's migration was complete — nothing was still relying on an unguarded direct `UPDATE`).
 
 ### PR6d — My Requests view + withdraw endpoint (Action Item 6, net-new)
 

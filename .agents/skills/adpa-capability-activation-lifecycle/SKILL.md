@@ -22,6 +22,12 @@ description: Module activation state machine for governed modules (ADR-005 Phase
 
 When one of these is built, it should extend this skill, not duplicate it.
 
+**ADR-012 PR6a addition (2026-07-17, shipped)**: `capability_override_requests.status` (and its accompanying decision columns) has never been DB-enforced the way `activation_status` is — `markApproved`/`markDenied` are today plain app-layer `UPDATE`s with no procedure to extend. Migration 445 adds `decide_capability_request(request_id, decision, decided_by, decided_by_department, reason, override_expires_at)`, `decision IN ('approved', 'denied', 'withdrawn')`, intended to become the sole permitted writer (PR6c makes that real). `SECURITY DEFINER` + a pinned `search_path`, so it keeps working once PR6c's guard is enforcing. Withdraw is a genuinely different rule from approve/deny, not a variant of the same one: requester-only (`decided_by = requested_by`), no department check at all; approve/deny require `decided_by != requested_by` **and** an active `user_departments` membership in `decided_by_department` for the capability's own `portfolio_id` — the same two-distinct-department-member rule the app layer already enforces (Phase 2 task 4), now also enforced here as defense in depth, matching this skill's own established "the app layer checks this too, but a DB-level guarantee means a future code path can't accidentally skip it" reasoning. Performs its own `audit_log` insert via `capability_row_digest` (migration 444, PR3) — digest only, never the raw `justification`. **This PR is purely additive**: `markApproved`/`markDenied` don't call it yet (PR6b), and nothing guards direct `UPDATE`s yet (PR6c) — the procedure exists and is correct, but isn't yet the only path.
+
+**Correction carried from ADR-012 §D (caught during this PR's own implementation)**: an earlier draft of ADR-012 planned PR6c's lockdown as `REVOKE UPDATE ... FROM <app role>`. That's wrong for this codebase specifically — see this skill's own invariant below (unchanged, just newly relevant to a second table): there is no separate low-privilege app role to revoke from without rewiring deployment credentials. PR6c instead adds a second `BEFORE UPDATE` trigger + guard variable, structurally identical to `guard_capability_registry_activation_status`, just guarding `capability_override_requests`'s decision columns instead of `capability_registry.activation_status`.
+
+**Verification gap (same shape as PR2/PR3)**: `server/tests/integration/`'s shared harness is still blocked repo-wide. `server/scripts/verify-decide-capability-request.ts` is the standalone-script fallback (same precedent this skill's own Phase 6/7 real-Postgres proofs already used for this exact blocker) — transaction-wrapped, always `ROLLBACK`'d, safe to run repeatedly against a real database including this project's persistent Azure dev instance. Written and type-checked in this session but **not executed against a live database** — deliberately left for the project owner to run (`cd server && npx tsx --require dotenv/config scripts/verify-decide-capability-request.ts`) rather than run unilaterally against shared infrastructure outside an explicit request to do so.
+
 ## Invariants
 
 - Must always: change `activation_status` only through `promote_capability_status(p_capability_id, p_new_status, p_changed_by, p_reason, p_draco_verdict_id, p_is_override, p_override_expires_at)`. There is no other sanctioned write path.
@@ -98,6 +104,8 @@ When one of these is built, it should extend this skill, not duplicate it.
 | `server/tests/integration/federated-capability-ownership-phase2task4.test.ts` | Real-Postgres proof: REQ-PHASE2T4-001..006 |
 | `server/tests/integration/federated-capability-ownership-phase3task6.test.ts` | Real-Postgres proof: REQ-PHASE3T6-002..008 |
 | `server/tests/integration/federated-capability-ownership-approvals-queue.test.ts` | Real-Postgres proof for `listPendingForUser` scoping (both repositories) — written, blocked by the same pre-existing Jest ESM harness issue as every other integration suite here; verified instead via a standalone scratch script (7/7 assertions) |
+| `server/migrations/445_capability_override_requests_withdraw.sql` | ADR-012 PR6a: `withdrawn` added to `capability_override_requests_status_check`, `withdrawn_at` column, `decide_capability_request` stored procedure (`SECURITY DEFINER`, pinned `search_path`) |
+| `server/scripts/verify-decide-capability-request.ts` | ADR-012 PR6a: standalone, transaction-wrapped (always `ROLLBACK`'d) real-Postgres verification for `decide_capability_request` — not run against a live DB in-session, see the PR6a addition's verification-gap note above |
 
 ## Commands
 
@@ -109,6 +117,9 @@ npm run test:integration                                    # real Azure test DB
 
 cd orchestrator/Adpa.Orchestrator
 dotnet build -c Release                                     # compile-only check for the governance_ledger migration
+
+cd server
+npx tsx --require dotenv/config scripts/verify-decide-capability-request.ts   # ADR-012 PR6a, real-Postgres, safe (rolled back)
 ```
 
 ## Related Skills
