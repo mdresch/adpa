@@ -48,6 +48,7 @@ public sealed class ResolvedCurrentUser
 public sealed class CurrentUserService(IHttpClientFactory httpClientFactory, ILogger<CurrentUserService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private readonly SemaphoreSlim _lock = new(1, 1);
     private ResolvedCurrentUser? _cached;
 
     private sealed class MeResponse
@@ -56,6 +57,13 @@ public sealed class CurrentUserService(IHttpClientFactory httpClientFactory, ILo
         [JsonPropertyName("departments")] public List<CurrentUserDepartmentMembership>? Departments { get; set; }
     }
 
+    /// <summary>
+    /// Double-checked locking: a Blazor Server circuit can have multiple components call
+    /// this concurrently on first render (e.g. a page and its nested cards all gating on
+    /// the same profile). Without the lock, each would race its own HTTP call and the
+    /// last one to finish would silently win, rather than every caller sharing one
+    /// resolved (or one in-flight) result.
+    /// </summary>
     public async Task<ResolvedCurrentUser> GetAsync(CancellationToken cancellationToken = default)
     {
         if (_cached is not null)
@@ -63,33 +71,46 @@ public sealed class CurrentUserService(IHttpClientFactory httpClientFactory, ILo
             return _cached;
         }
 
-        var client = httpClientFactory.CreateClient("api");
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            var response = await client.GetAsync("api/CurrentUser/me", cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            if (_cached is not null)
             {
-                logger.LogWarning("Current-user profile lookup failed with {StatusCode}", (int)response.StatusCode);
-                _cached = new ResolvedCurrentUser();
                 return _cached;
             }
 
-            var body = await response.Content.ReadFromJsonAsync<MeResponse>(JsonOptions, cancellationToken);
-            _cached = new ResolvedCurrentUser
+            var client = httpClientFactory.CreateClient("api");
+            try
             {
-                User = body?.User,
-                Departments = body?.Departments ?? new List<CurrentUserDepartmentMembership>()
-            };
-        }
-        catch (Exception ex)
-        {
-            // Fail closed: a relay/network failure resolves to "no memberships, not an
-            // admin", the same posture CapabilityController's Relay/RelayList already take
-            // on their own failures (502, not a silently-broader default).
-            logger.LogError(ex, "Current-user profile lookup threw");
-            _cached = new ResolvedCurrentUser();
-        }
+                var response = await client.GetAsync("api/CurrentUser/me", cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("Current-user profile lookup failed with {StatusCode}", (int)response.StatusCode);
+                    _cached = new ResolvedCurrentUser();
+                    return _cached;
+                }
 
-        return _cached;
+                var body = await response.Content.ReadFromJsonAsync<MeResponse>(JsonOptions, cancellationToken);
+                _cached = new ResolvedCurrentUser
+                {
+                    User = body?.User,
+                    Departments = body?.Departments ?? new List<CurrentUserDepartmentMembership>()
+                };
+            }
+            catch (Exception ex)
+            {
+                // Fail closed: a relay/network failure resolves to "no memberships, not an
+                // admin", the same posture CapabilityController's Relay/RelayList already take
+                // on their own failures (502, not a silently-broader default).
+                logger.LogError(ex, "Current-user profile lookup threw");
+                _cached = new ResolvedCurrentUser();
+            }
+
+            return _cached;
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 }
