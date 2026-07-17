@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import { connect, AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager'
 import type { ConfirmChannel, ConsumeMessage, Options } from 'amqplib'
 import type { IQueue, IQueueJob, IQueueOptions, QueueProcessor } from './IQueue'

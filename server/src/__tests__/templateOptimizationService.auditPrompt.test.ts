@@ -2,8 +2,9 @@ import { pool } from '../database/connection'
 import { aiService } from '../services/aiService'
 import { templateOptimizationService } from '../services/templateOptimizationService'
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'audit-prompt-suggestion-id'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'audit-prompt-suggestion-id'),
 }))
 
 jest.mock('../database/connection', () => ({

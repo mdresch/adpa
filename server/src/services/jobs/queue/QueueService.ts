@@ -17,7 +17,7 @@ import {
   JobDatabaseError,
   StuckJobsError,
 } from '../errors'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import { PerformanceMonitor } from '../../../utils/performanceMonitor'
 
 /**
@@ -89,7 +89,7 @@ export class QueueService {
       )
     }
 
-    const jobId = validatedData.jobId || options?.jobId || uuidv4()
+    const jobId = validatedData.jobId || options?.jobId || randomUUID()
     let queueName: QueueName
     let queue: IQueue | undefined
 

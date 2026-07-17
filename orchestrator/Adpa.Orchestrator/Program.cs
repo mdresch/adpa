@@ -99,7 +99,7 @@ builder.Services.AddMassTransit(x =>
 // 4. Intelligence Bridge (Typed HttpClient)
 // ---------------------------------------------------------------------------
 
-builder.Services.AddHttpClient<IntelligenceClient>(client => 
+builder.Services.AddHttpClient<IntelligenceClient>(client =>
 {
     var intelUrl = builder.Configuration["INTELLIGENCE_URL"] ?? "http://intelligence";
     // Fallback for local debugging without service discovery
@@ -108,6 +108,17 @@ builder.Services.AddHttpClient<IntelligenceClient>(client =>
         intelUrl = "http://localhost:8000";
     }
     client.BaseAddress = new Uri(intelUrl);
+});
+
+// ---------------------------------------------------------------------------
+// 4a. Capability Registry (ADR-005 Phase 2 — reads Node's capability_registry;
+//     the orchestrator's own governance-ledger DB cannot query it directly)
+// ---------------------------------------------------------------------------
+
+builder.Services.AddHttpClient<CapabilityRegistryClient>(client =>
+{
+    client.BaseAddress = new Uri(CapabilityRegistryUrlResolver.Resolve(builder.Configuration, builder.Environment));
+    client.Timeout = TimeSpan.FromSeconds(5); // fail closed fast, not hang the approval endpoint
 });
 
 // ---------------------------------------------------------------------------

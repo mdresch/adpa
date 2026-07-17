@@ -2,7 +2,7 @@ import { GitHubService, GitHubConfig, GitHubContent, GitHubPullRequest, GitHubIs
 import { IntegrationProvider, Document } from "./confluence"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 
 export interface GitHubTemplate {
   id: string

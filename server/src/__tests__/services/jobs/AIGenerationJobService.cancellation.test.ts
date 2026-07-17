@@ -18,7 +18,7 @@ import { jest } from '@jest/globals'
 import { QueueService } from '../../../services/jobs/queue/QueueService'
 import { createMockQueueService } from '../../../services/jobs/queue/QueueServiceFactory'
 import type { QueueServiceDependencies } from '../../../services/jobs/queue/QueueDependencies'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 jest.mock('../../../utils/performanceMonitor', () => {
   const mockFn = jest.fn(() => jest.fn())

@@ -1,0 +1,38 @@
+@inherits LayoutComponentBase
+
+<div class="gp-shell">
+    <nav class="gp-nav">
+        <div class="gp-nav-inner">
+            <a class="gp-brand" href="/">ADPA <span>Governor Portal</span></a>
+
+            <div class="gp-nav-links">
+                <NavLink href="/approvals" Match="NavLinkMatch.All">Approvals</NavLink>
+                <NavLink href="/ledger">Ledger</NavLink>
+                <NavLink href="/requirements">Requirements</NavLink>
+                <NavLink href="/governance-center">Governance Center</NavLink>
+            </div>
+
+            <AuthorizeView>
+                <Authorized>
+                    <span class="gp-nav-user">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
+                    @* Plain HTML button, deliberately not <PillButton> -- PillButton binds @onclick
+                       unconditionally, which would attach a SignalR round-trip to what must stay a
+                       genuine browser POST navigation (same reasoning as Login.razor's own form).
+                       data-enhance="false" for the same reason as Login.razor's form -- without it,
+                       Blazor's enhanced navigation intercepts this POST via fetch and the resulting
+                       redirect doesn't behave like a real navigation. *@
+                    <form method="post" action="/auth/logout" class="gp-nav-form" data-enhance="false">
+                        <button type="submit" class="gp-btn gp-btn-secondary">Sign out</button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <PillButton Href="/login" Variant="PillButton.ButtonVariant.Primary">Sign in</PillButton>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </nav>
+
+    <main class="gp-main">
+        @Body
+    </main>
+</div>

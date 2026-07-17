@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger'
 import { aiService } from '../aiService'
 import { ContextAwareAIService } from '../../modules/context/integration'
 import { io } from '@/socket'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
 import type { AIGenerationJobData, JobStatus, QueueName } from './types'

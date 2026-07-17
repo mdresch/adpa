@@ -7,7 +7,7 @@
 
 import { pool } from '../../database/connection'
 import { baselineUpdateService } from '../../services/baselineUpdateService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 describe('Baseline Update Service', () => {
   let testProjectId: string

@@ -6,7 +6,7 @@ import { validateParams, validateQuery, validate, schemas } from "../middleware/
 import Joi from "joi"
 import { logger, childLogger } from "../utils/logger"
 import { getJobStatus, cancelJob, addJob } from "../services/queueService"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import { JobType } from "../services/jobs/types"
 import AnalyticsTrackingService from "../services/analyticsTrackingService"
 

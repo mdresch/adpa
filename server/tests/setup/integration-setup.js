@@ -2,19 +2,40 @@ const { Pool } = require('pg');
 const dotenv = require('dotenv');
 const path = require('path');
 
-// Load environment variables for the test process
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// Load .env.test specifically (not the main .env) -- this is the file that
+// carries AZURE_TEST_DB_HOST/USER/PASSWORD, deliberately kept separate from
+// the real production DATABASE_URL in .env so this file can never end up
+// pointed at production by an env-loading order mistake.
+dotenv.config({ path: path.resolve(__dirname, '../../.env.test') });
 
-const adminDbUrl = 'postgresql://test_user:test_pass@127.0.0.1:5433/postgres';
+const dbHost = process.env.AZURE_TEST_DB_HOST;
+const dbPort = process.env.AZURE_TEST_DB_PORT || '5432';
+const dbUser = process.env.AZURE_TEST_DB_USER;
+const dbPassword = process.env.AZURE_TEST_DB_PASSWORD;
+
+if (!dbHost || !dbUser || !dbPassword || dbPassword.startsWith('<FILL_IN')) {
+  throw new Error(
+    '[INTEGRATION-SETUP] AZURE_TEST_DB_HOST / AZURE_TEST_DB_USER / AZURE_TEST_DB_PASSWORD ' +
+    'are not set in server/.env.test.'
+  );
+}
+
 const templateDbName = 'test_template';
 const workerId = process.env.JEST_WORKER_ID || '1';
 const testDbName = `test_db_worker_${workerId}`;
-const testDbUrl = `postgresql://test_user:test_pass@127.0.0.1:5433/${testDbName}`;
+const testDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${testDbName}?sslmode=require`;
+
+// Guard rail: these are DROP/CREATE DATABASE target names -- refuse to run
+// against anything that isn't clearly a disposable test database.
+if (!testDbName.startsWith('test_db_worker_')) {
+  throw new Error(`[INTEGRATION-SETUP] Refusing to run against database name "${testDbName}"`);
+}
 
 // IMPORTANT: Set DATABASE_URL BEFORE any app code is imported
 process.env.DATABASE_URL = testDbUrl;
 process.env.NODE_ENV = 'test';
-process.env.DB_MAX_RETRIES_PER_METHOD = '5'; // Increase safety for local Windows Docker
+process.env.DB_MAX_RETRIES_PER_METHOD = '5';
+require('./allowInsecureTestDbTls');
 
 // Mock Langfuse to avoid dynamic import / experimental-vm-modules issues
 jest.mock('langfuse', () => ({
@@ -81,6 +102,22 @@ jest.mock('@documenso/pdf-sign', () => ({
   updateSigningPlaceholder: jest.fn().mockResolvedValue(Buffer.from('mock-updated-pdf'))
 }));
 
+// Mock @adobe/pdfservices-node-sdk: its own nested uuid@14 dependency ships an
+// ESM-only dist-node build ("export { default as MAX } from './max.js'"),
+// which throws "Unexpected token 'export'" under Jest's CJS transform the
+// moment anything in the require chain (src/server.ts -> documentGenerator ->
+// adobePdfService -> adobe-pdf.ts) touches it. src/integrations/adobe-pdf.ts
+// only references PDFServicesSDK.* inside function bodies, never at module
+// load time, so an empty namespace mock is safe here.
+jest.mock('@adobe/pdfservices-node-sdk', () => ({}));
+
+// Mock @paralleldrive/cuid2: also ESM-only ("import ... from './src/index.js'"
+// with no CJS build), pulled in transitively via lib/morphic/db/schema.ts once
+// src/server.ts's morphic routes are required. Only createId is actually used
+// (lib/morphic/db/schema.ts's generateId()); the rest are stubbed for any other
+// consumer further down the require chain.
+jest.mock('@paralleldrive/cuid2', () => require('./mockCuid'));
+
 // Shared state for hooks
 let internalPool;
 let connectDatabase;
@@ -91,29 +128,40 @@ let mockAIProvider;
 let mockQueues;
 
 beforeAll(async () => {
-  const connectWithFallbacks = async () => {
-    const hosts = ['127.0.0.1', 'localhost'];
+  // No more localhost/127.0.0.1 fallback pair -- there's exactly one Azure
+  // host now, not "maybe docker resolved as localhost, maybe as 127.0.0.1"
+  // (the actual source of the old fallback loop). Retries still matter --
+  // Azure connections can transiently fail under load -- but there's nothing
+  // to fall back between anymore.
+  const connectWithRetry = async (dbName = 'postgres') => {
+    const url = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbName}?sslmode=require`;
     let lastErr;
-    
+
     for (let attempt = 1; attempt <= 10; attempt++) {
-      for (const host of hosts) {
-        const url = `postgresql://test_user:test_pass@${host}:5433/postgres`;
-        const pool = new Pool({ 
-          connectionString: url, 
-          connectionTimeoutMillis: 5000,
-          idleTimeoutMillis: 1000
-        });
-        
-        try {
-          const client = await pool.connect();
-          client.release();
-          return pool;
-        } catch (err) {
-          lastErr = err;
-          await pool.end().catch(() => {});
-        }
+      // idleTimeoutMillis is deliberately generous (not e.g. 1000ms), not a
+      // localhost-docker-era leftover: the client.connect()/release() below is
+      // a connectivity probe, and this pool is then handed back for real use
+      // (adminPool.query(...) calls) moments later. A too-short idle timeout
+      // destroys that probed connection before the first real query arrives,
+      // forcing pg to open a second physical connection to Azure in a hurry --
+      // which was observed to hang indefinitely against this server (unlike
+      // the first, unhurried connection, which always succeeded), stalling
+      // the whole test run on a pool that neither resolves nor rejects.
+      const pool = new Pool({
+        connectionString: url,
+        connectionTimeoutMillis: 8000,
+        idleTimeoutMillis: 30000
+      });
+
+      try {
+        const client = await pool.connect();
+        client.release();
+        return pool;
+      } catch (err) {
+        lastErr = err;
+        await pool.end().catch(() => {});
+        await new Promise(r => setTimeout(r, 2000));
       }
-      await new Promise(r => setTimeout(r, 2000));
     }
     throw lastErr;
   };
@@ -123,7 +171,7 @@ beforeAll(async () => {
   while (retries > 0 && !created) {
     let adminPool;
     try {
-      adminPool = await connectWithFallbacks();
+      adminPool = await connectWithRetry('postgres');
       
       // Force disconnect other users before dropping
       await adminPool.query(`
@@ -159,7 +207,7 @@ beforeAll(async () => {
 
   const { aiProviderService } = require('../../src/services/aiProviderService');
   const { MockAIProvider } = require('../doubles/MockAIProvider');
-  const { setQueueService } = require('../../src/services/queueService');
+  const { setQueueServiceInstance } = require('../../src/services/queueService');
   const { createQueueService } = require('../../src/services/jobs/queue/QueueServiceFactory');
   const { MockQueue } = require('../doubles/MockQueue');
   const { io } = require('../../src/socket');
@@ -191,7 +239,7 @@ beforeAll(async () => {
   const mockQueueService = createQueueService(
     mockQueues, internalPool, io, cache, aiService, ContextAwareAIService
   );
-  setQueueService(mockQueueService);
+  setQueueServiceInstance(mockQueueService);
 });
 
 let transactionClient;

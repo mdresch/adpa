@@ -5,6 +5,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // Resolve Core Attributes (G1-G4 Resilience)
 var firebaseProjectId = builder.Configuration["FIREBASE_PROJECT_ID"] ?? "adpa-dev";
+// ADR-009: the Firebase Web API key (same value as the Next.js frontend's
+// NEXT_PUBLIC_FIREBASE_API_KEY, a public client-config key, not a service-account
+// secret) that Adpa.Web needs for Identity Toolkit REST sign-in/refresh calls.
+var firebaseWebApiKey = builder.Configuration["FIREBASE_WEB_API_KEY"] ?? "";
 
 // 1. Data & Messaging Tier (Containerized Resources)
 // ---------------------------------------------------------------------------
@@ -55,6 +59,7 @@ intelligence.WithReference(messaging);
 
 var apiservice = builder.AddProject<Projects.Adpa_Orchestrator>("apiservice")
     .WithHttpEndpoint(port: 5002, name: "http")
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
     .WithEnvironment("FIREBASE_PROJECT_ID", firebaseProjectId)
     .WithEnvironment("AI_PROVIDER", "google"); // High-integrity default for RPAS stabilization
 
@@ -85,13 +90,21 @@ var backend = builder.AddExecutable("adpa-backend", "pnpm", "../../server", "run
     .WithEnvironment("OTEL_SERVICE_NAME", "adpa-backend")
     .WithEnvironment("TRACING_ENABLED", "true");
 
+// CapabilityRegistryClient (Adpa.Orchestrator) relays to this backend's capability_registry
+// endpoints. Feeds its CAPABILITY_REGISTRY_URL config key directly with the backend's real
+// resolved endpoint -- ExecutableResource doesn't satisfy WithReference's IResourceWithConnectionString
+// constraint, so plain hostname-based service discovery ("http://adpa-backend") isn't an option here;
+// without this, every relay call 502s (CapabilityController.Relay/RelayList).
+apiservice.WithEnvironment("CAPABILITY_REGISTRY_URL", backend.GetEndpoint("http"));
+
 // ---------------------------------------------------------------------------
 // 5. Experience Tier (Management Interface)
 // ---------------------------------------------------------------------------
 
 // launchSettings.json already defines http://localhost:5006 — do not add a second endpoint named "http".
 var web = builder.AddProject<Projects.Adpa_Web>("webfrontend")
-    .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5008");
+    .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5008")
+    .WithEnvironment("FIREBASE_WEB_API_KEY", firebaseWebApiKey);
 web.WithExternalHttpEndpoints();
 web.WithReference(apiservice);
 

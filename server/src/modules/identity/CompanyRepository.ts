@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import { randomUUID } from 'crypto';
 import { childLogger } from '../../utils/logger';
 
 export interface CompanyData {
@@ -8,6 +9,7 @@ export interface CompanyData {
   logo_url?: string;
   metadata?: any;
   is_active?: boolean;
+  created_by?: string;
 }
 
 export class CompanyRepository {
@@ -59,16 +61,17 @@ export class CompanyRepository {
 
   async create(data: CompanyData, client?: PoolClient) {
     const db = client || this.pool;
-    const id = data.id || require('uuid').v4();
+    const id = data.id || randomUUID();
     const query = `
-      INSERT INTO companies (id, name, domain, logo_url, metadata, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO companies (id, name, domain, logo_url, metadata, is_active, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `;
     const values = [
-      id, data.name, data.domain, data.logo_url, 
+      id, data.name, data.domain, data.logo_url,
       data.metadata ? JSON.stringify(data.metadata) : null,
-      data.is_active ?? true
+      data.is_active ?? true,
+      data.created_by ?? null
     ];
     const result = await db.query(query, values);
     return result.rows[0];

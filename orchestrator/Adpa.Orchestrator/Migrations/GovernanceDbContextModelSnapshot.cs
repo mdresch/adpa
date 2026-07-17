@@ -68,6 +68,9 @@ namespace Adpa.Orchestrator.Migrations
                     b.Property<string>("GovernorNotes")
                         .HasColumnType("text");
 
+                    b.Property<string>("Hash")
+                        .HasColumnType("text");
+
                     b.Property<string>("IdeationJson")
                         .HasColumnType("text");
 
@@ -78,6 +81,9 @@ namespace Adpa.Orchestrator.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("OverrideJustification")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PrevHash")
                         .HasColumnType("text");
 
                     b.Property<string>("RitualType")

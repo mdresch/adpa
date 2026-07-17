@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import multer from 'multer'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import { pool } from '../../database/connection'
 import { childLogger } from '../../utils/logger'
 import { ProjectRepository } from './ProjectRepository'

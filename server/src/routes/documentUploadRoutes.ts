@@ -119,7 +119,7 @@ router.post(
 
       if (!actualProjectId && assessmentName) {
         // Create onboarding project automatically
-        const { v4: uuidv4 } = require('uuid');
+        const { randomUUID: uuidv4 } = require('crypto');
         const { pool } = require('../database/connection');
 
         // Try to fetch the user's company_id so the onboarding project

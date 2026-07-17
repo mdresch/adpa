@@ -14,7 +14,7 @@ import type { IQueue } from '../../../../services/jobs/queue/IQueue'
 import type { JobData } from '../../../../services/jobs/types'
 import { RabbitQueueAdapter } from '../../../../services/jobs/queue/RabbitQueueAdapter'
 import { connect as mockConnect } from 'amqp-connection-manager'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 describe('QueueService Integration Tests', () => {
   let mockDependencies: Partial<QueueServiceDependencies>

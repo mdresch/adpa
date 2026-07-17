@@ -53,7 +53,7 @@ export class TaskRepository {
 
   async create(data: TaskData, client?: PoolClient) {
     const db = client || this.pool;
-    const id = data.id || require('uuid').v4();
+    const id = data.id || require('crypto').randomUUID();
     const query = `
       INSERT INTO project_tasks (
         id, project_id, task_name, description, estimated_hours, 

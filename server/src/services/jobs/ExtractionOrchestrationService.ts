@@ -18,7 +18,7 @@ import { io } from '../../socket'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import type { PmbokDomain } from '@/types/pmbok'
 import type { IQueueJob } from './queue/IQueue'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 // Phase 3: Use centralized types
 import type { ProjectDataExtractionJobData, JobStatus, QueueName } from './types'
 // Phase 5: Dependency injection

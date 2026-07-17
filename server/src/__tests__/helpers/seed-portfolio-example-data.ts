@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import type { Pool } from "pg"
 import { testCriteria, testProjects } from "../fixtures/portfolio-test-data"
 

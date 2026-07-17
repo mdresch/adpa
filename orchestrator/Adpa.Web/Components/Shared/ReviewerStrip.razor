@@ -1,0 +1,17 @@
+<div class="gp-reviewer-strip">
+    @foreach (var reviewer in Reviewers)
+    {
+        <StatusChip Label="@reviewer.Label" State="@reviewer.State" />
+    }
+</div>
+
+@code {
+    /// <summary>ADR-011: a row of reviewer status chips -- shared between the two-signature
+    /// override flow (requester/approver) and break-glass's five reviewer categories
+    /// (account_owner/manager/internal_audit/external_auditor/super_admin). One component,
+    /// not two, since the visual pattern ("who's signed off, who hasn't") is identical.</summary>
+    public sealed record ReviewerStatus(string Label, StatusChip.ChipState State);
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ReviewerStatus> Reviewers { get; set; } = Array.Empty<ReviewerStatus>();
+}

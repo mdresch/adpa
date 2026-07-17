@@ -7,7 +7,7 @@
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
 import { signPdf, addSigningPlaceholder } from "../lib/documenso"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import * as crypto from "crypto"
 import * as fs from "fs"
 import * as path from "path"

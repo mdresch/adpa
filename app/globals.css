@@ -1,6 +1,23 @@
+/* @import must be the first statement in the file (CSS spec: @import precedes
+   all other rules except @charset/@layer). Under Tailwind v3's @tailwind
+   directives (unlike v4's `@import "tailwindcss"`), those directives expand
+   into plain CSS rules by build time, so this can't sit "after the Tailwind
+   import" the way shadcn's docs (written for v4) show it -- it has to be the
+   literal first line instead. */
+@import "./typeset.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.typeset-docs {
+  --typeset-font-body: var(--font-space-grotesk);
+  --typeset-font-heading: var(--font-space-grotesk);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.6;
+  --typeset-flow: 1em;
+}
 
 @layer base {
   :root {

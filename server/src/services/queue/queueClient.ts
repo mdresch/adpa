@@ -99,6 +99,9 @@ export const gkgSyncQueue = createRabbitQueue("gkg-sync", 2, 5000, {
 export const semanticProcessingQueue = createRabbitQueue("semantic-processing", 3, 5000, {
   prefetch: queuePrefetch("SEMANTIC_PROCESSING_PREFETCH", QUEUE_PREFETCH),
 })
+export const departmentClaimsSyncQueue = createRabbitQueue("department-claims-sync", 5, 3000, {
+  prefetch: queuePrefetch("DEPARTMENT_CLAIMS_SYNC_PREFETCH", 2),
+})
 
 // Trace attachment (lightweight)
 const tracer = trace.getTracer("adpa-queue-service")
@@ -157,6 +160,7 @@ export const queues = [
   { name: "digital-twin-triggers", queue: digitalTwinTriggerQueue },
   { name: "gkg-sync", queue: gkgSyncQueue },
   { name: "semantic-processing", queue: semanticProcessingQueue },
+  { name: "department-claims-sync", queue: departmentClaimsSyncQueue },
 ]
 queues.forEach(({ name, queue }) => attachTracing(queue, name))
 
@@ -181,6 +185,12 @@ export function getQueueServiceInstance(): ReturnType<typeof createQueueService>
     )
   }
   return queueServiceInstance
+}
+
+// Test-only injection seam: lets integration tests substitute a QueueService built on
+// MockQueues instead of the real RabbitMQ-backed queues above (see tests/setup/integration-setup.js).
+export function setQueueServiceInstance(instance: ReturnType<typeof createQueueService>): void {
+  queueServiceInstance = instance
 }
 
 // Exported helpers delegating to QueueService

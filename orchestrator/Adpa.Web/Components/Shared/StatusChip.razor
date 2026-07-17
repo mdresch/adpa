@@ -1,0 +1,22 @@
+<span class="gp-chip gp-chip-@StateClass">@Label</span>
+
+@code {
+    /// <summary>ADR-011: a pill-shaped status signal. State drives color, never the raw text alone --
+    /// don't rely on Label wording ("Approved") to carry meaning a screen reader/colorblind user can't
+    /// get from State's actual visual treatment too (background + ink pair, not hue alone).</summary>
+    public enum ChipState { Approved, Pending, Declined, Neutral }
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public ChipState State { get; set; } = ChipState.Pending;
+
+    private string StateClass => State switch
+    {
+        ChipState.Approved => "approved",
+        ChipState.Pending => "pending",
+        ChipState.Declined => "declined",
+        _ => "neutral"
+    };
+}

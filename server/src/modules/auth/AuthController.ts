@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID as uuidv4 } from 'crypto'
 import { AuthRepository } from './AuthRepository';
 import { childLogger } from "../../utils/logger";
 import { trackActivity } from "../../middleware/analyticsMiddleware";
@@ -126,14 +126,20 @@ export class AuthController {
 
         // Handle company creation/assignment
         let companyId: string | null = null;
+        let isNewCompany = false;
         if (companyName && companyName.trim()) {
           const existingCompany = await AuthController.repository.findCompanyByName(companyName.trim(), client);
 
           if (existingCompany.rows.length > 0) {
             companyId = existingCompany.rows[0].id;
           } else {
+            isNewCompany = true;
             companyId = uuidv4();
             const emailDomain = email.split('@')[1] || null;
+            // created_by is set below, after the new user row exists: companies.created_by
+            // references users(id) while users.company_id references companies(id) — a
+            // circular FK neither insert order alone can satisfy, so this starts NULL and
+            // is back-filled via setCompanyCreatedBy once the user row is committed.
             await AuthController.repository.createCompany({
               id: companyId,
               name: companyName.trim(),
@@ -158,8 +164,11 @@ export class AuthController {
 
         const metadata = companyName ? { company_name: companyName.trim() } : null;
 
-        // Create user
+        // Create user. Pre-generate the id only when this registration is also creating a
+        // new company, so it can become that company's created_by (Company Admin) below.
+        const newUserId = isNewCompany ? uuidv4() : undefined;
         const createUserResult = await AuthController.repository.createUser({
+          id: newUserId,
           email,
           password_hash: passwordHash,
           name,
@@ -171,6 +180,10 @@ export class AuthController {
 
         if (!createUserResult.rows || createUserResult.rows.length === 0) {
           throw new Error("User creation failed");
+        }
+
+        if (isNewCompany && companyId && newUserId) {
+          await AuthController.repository.setCompanyCreatedBy(companyId, newUserId, client);
         }
 
         return createUserResult;

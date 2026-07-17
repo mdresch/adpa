@@ -1,5 +1,5 @@
 import { pool } from '../../database/connection';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto'
 import { logger } from '../../utils/logger';
 
 export type AgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'guided';

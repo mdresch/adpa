@@ -69,7 +69,7 @@ export class ProgramRepository {
 
   async create(data: ProgramData, client?: PoolClient) {
     const db = client || this.pool;
-    const id = data.id || require('uuid').v4();
+    const id = data.id || require('crypto').randomUUID();
     const query = `
       INSERT INTO programs (id, name, description, budget, currency, start_date, end_date, status, owner_id, created_by)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

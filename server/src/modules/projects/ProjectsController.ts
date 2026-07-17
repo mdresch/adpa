@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { ProjectRepository } from './ProjectRepository';
 import { AuthRepository } from '../auth/AuthRepository';
 import { lessonsLearnedService } from '../../services/lessonsLearnedService';
@@ -174,7 +174,7 @@ export class ProjectsController {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const id = uuidv4();
+      const id = randomUUID();
       const correlationId = asyncLocalStorage.getStore();
 
       // Handle team members input (simplifying since we have a repository now)

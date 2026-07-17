@@ -23,8 +23,9 @@
 import { AIGenerationJobService } from '../../../services/jobs/AIGenerationJobService';
 import { documentGenerationService } from '../../../services/documentGenerationService';
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'generated-job-id'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'generated-job-id'),
 }));
 
 jest.mock('../../../services/documentGenerationService', () => ({

@@ -1,0 +1,59 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Sign in — ADPA Governor Portal</PageTitle>
+
+<div class="container" style="max-width: 420px; margin-top: 72px;">
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <h1 class="h4 mb-1">Governor Portal</h1>
+            <p class="text-muted small mb-4">Sign in with your ADPA account to review and act on governance decisions.</p>
+
+            @if (Error)
+            {
+                <div class="alert alert-danger py-2 small" role="alert">
+                    Invalid email or password. Please try again.
+                </div>
+            }
+
+            @* Deliberately a plain HTML form (no EditForm/@@onsubmit) posting to the
+               non-Blazor /auth/login minimal API endpoint (see AuthEndpoints.cs) -- a
+               real browser POST navigation, not a SignalR circuit call, so
+               HttpContext.SignInAsync (which needs to write a Set-Cookie header on an
+               actual response) works regardless of this page's Blazor render mode.
+               MUST NOT be "/login" -- this page's own @@page "/login" route collides
+               with a same-path POST endpoint (confirmed: AmbiguousMatchException).
+               data-enhance="false" is equally required: Blazor's blazor.web.js
+               intercepts ALL forms by default ("enhanced navigation"), including plain
+               HTML ones, and handles them via a fetch-based DOM patch instead of a real
+               browser navigation -- the server's 302 redirect then doesn't update the
+               address bar the way a native POST does (confirmed: login appeared to
+               "succeed" but the browser stayed on /auth/login). This attribute forces a
+               genuine full-page POST, the only way HttpContext.SignInAsync's cookie and
+               the subsequent redirect behave like a normal navigation. *@
+            <form method="post" action="/auth/login" data-enhance="false">
+                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                <div class="mb-3">
+                    <label for="email" class="form-label small fw-semibold">Email</label>
+                    <input type="email" class="form-control" id="email" name="email" required autofocus />
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label small fw-semibold">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" required />
+                </div>
+                <button type="submit" class="btn btn-dark w-100">Sign in</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private bool Error => ErrorParam is not null;
+}

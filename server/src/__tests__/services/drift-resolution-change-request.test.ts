@@ -7,7 +7,7 @@
 
 import { driftResolutionService } from '../../services/driftResolutionService'
 import { pool } from '../../database/connection'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 describe('Drift Resolution - Change Request Creation', () => {
   let testProjectId: string

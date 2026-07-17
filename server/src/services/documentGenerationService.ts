@@ -5,7 +5,7 @@ import { documentTemplateService } from "../modules/documentTemplates/service"
 import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
 import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPrompt"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import { updateJobStatus, updateJobLlmProgress, type LlmProgressStep } from "./queueService"
 import { CompactorService } from "./compactorService"
 import { templateAuditService } from "./templateAuditService"

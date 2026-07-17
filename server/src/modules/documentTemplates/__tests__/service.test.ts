@@ -33,8 +33,9 @@ jest.mock('../../../utils/logger', () => ({
   })),
   asyncLocalStorage: {}
 }))
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'test-uuid-123')
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'test-uuid-123')
 }))
 jest.mock('../../../services/templateAuditService', () => ({
   templateAuditService: {
