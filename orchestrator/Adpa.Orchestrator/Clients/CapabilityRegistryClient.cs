@@ -161,6 +161,11 @@ public class CapabilityRegistryClient(HttpClient http)
     // /:moduleId/:portfolioId lookup.
     // -------------------------------------------------------------------------------
 
+    // ADR-012 Action Item 3: the Governor Portal Capability Register page's data
+    // source -- same GetRelayAsync shape as the pending-list endpoints above.
+    public Task<(int StatusCode, string Body)> ListAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
+        GetRelayAsync("/api/v1/capability-registry", bearerToken, cancellationToken);
+
     public Task<(int StatusCode, string Body)> ListPendingOverridesAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
         GetRelayAsync("/api/v1/capability-registry/overrides/pending", bearerToken, cancellationToken);
 
