@@ -52,6 +52,23 @@ export class CapabilityOverrideController {
     }
   };
 
+  /**
+   * ADR-012 PR6d: feeds the requester-facing My Requests view. Unlike listPending
+   * above (scoped to what the caller could act on as a reviewer), this is the
+   * caller's own requests as the requester -- a different question entirely, no
+   * admin/department-membership branching needed.
+   */
+  listMine = async (req: Request, res: Response) => {
+    try {
+      const requester = (req as any).user;
+      const mine = await this.overrideRequests.listOwnRequests(requester.id);
+      res.json({ overrideRequests: mine });
+    } catch (error) {
+      this.logger.error('List own override requests error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
   request = async (req: Request, res: Response) => {
     try {
       const { moduleId, portfolioId } = req.params;
@@ -217,6 +234,44 @@ export class CapabilityOverrideController {
       res.json({ overrideRequest: await this.overrideRequests.findById(requestId) });
     } catch (error) {
       this.logger.error('Deny override request error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
+  /**
+   * ADR-012 PR6d: a symmetric counterpart to deny, requester-initiated. Deliberately
+   * the narrowest authorization check in this controller -- department membership is
+   * irrelevant here, unlike every other action; the only question is whether the
+   * caller IS the request's own requestedBy. decide_capability_request enforces this
+   * again at the DB layer, but checking here first returns a clean 403 instead of a
+   * raw exception surfacing as a 500.
+   */
+  withdraw = async (req: Request, res: Response) => {
+    try {
+      const { moduleId, portfolioId, requestId } = req.params;
+
+      const capability = await this.capabilityRepository.findFullByModuleAndPortfolio(moduleId, portfolioId);
+      if (!capability) {
+        return res.status(404).json({ error: 'capability_registry row not found', moduleId, portfolioId });
+      }
+
+      const overrideRequest = await this.overrideRequests.findById(requestId);
+      if (!overrideRequest || overrideRequest.capabilityId !== capability.id) {
+        return res.status(404).json({ error: 'override request not found', requestId });
+      }
+      if (overrideRequest.status !== 'pending') {
+        return res.status(400).json({ error: `override request has already been decided (status: ${overrideRequest.status})` });
+      }
+
+      const requester = (req as any).user;
+      if (requester.id !== overrideRequest.requestedBy) {
+        return res.status(403).json({ error: 'Only the requester may withdraw their own request.' });
+      }
+
+      await this.overrideRequests.withdraw(requestId, requester.id);
+      res.json({ overrideRequest: await this.overrideRequests.findById(requestId) });
+    } catch (error) {
+      this.logger.error('Withdraw override request error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   };

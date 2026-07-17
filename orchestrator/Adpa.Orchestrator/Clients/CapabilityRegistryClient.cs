@@ -141,6 +141,11 @@ public class CapabilityRegistryClient(HttpClient http)
         string moduleId, string portfolioId, string requestId, DenyRequestBody request, string? bearerToken, CancellationToken cancellationToken = default) =>
         PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/override/{Uri.EscapeDataString(requestId)}/deny", request, bearerToken, cancellationToken);
 
+    // ADR-012 PR6d: requester-initiated, no request body needed -- same shape as ApproveOverrideAsync.
+    public Task<(int StatusCode, string Body)> WithdrawOverrideAsync(
+        string moduleId, string portfolioId, string requestId, string? bearerToken, CancellationToken cancellationToken = default) =>
+        PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/override/{Uri.EscapeDataString(requestId)}/withdraw", new { }, bearerToken, cancellationToken);
+
     public Task<(int StatusCode, string Body)> RequestExceptionAsync(
         string moduleId, string portfolioId, OverrideRequestBody request, string? bearerToken, CancellationToken cancellationToken = default) =>
         PostAsync($"/api/v1/capability-registry/{Uri.EscapeDataString(moduleId)}/{Uri.EscapeDataString(portfolioId)}/exceptions/request", request, bearerToken, cancellationToken);
@@ -171,6 +176,13 @@ public class CapabilityRegistryClient(HttpClient http)
 
     public Task<(int StatusCode, string Body)> ListPendingExceptionsAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
         GetRelayAsync("/api/v1/capability-registry/exceptions/pending", bearerToken, cancellationToken);
+
+    // ADR-012 PR6d: the requester-facing My Requests view -- same GetRelayAsync shape.
+    public Task<(int StatusCode, string Body)> ListMineOverridesAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
+        GetRelayAsync("/api/v1/capability-registry/overrides/mine", bearerToken, cancellationToken);
+
+    public Task<(int StatusCode, string Body)> ListMineExceptionsAsync(string? bearerToken, CancellationToken cancellationToken = default) =>
+        GetRelayAsync("/api/v1/capability-registry/exceptions/mine", bearerToken, cancellationToken);
 
     /// <summary>Distinct name from the public GetAsync(moduleId, portfolioId, ...) above --
     /// "string?" and "string" are the same type post-erasure, so a same-named overload

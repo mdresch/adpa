@@ -101,6 +101,22 @@ public sealed class CapabilityController(
     public Task<IActionResult> ListPendingExceptions(CancellationToken cancellationToken) =>
         RelayList("exceptions/pending", token => capabilityRegistry.ListPendingExceptionsAsync(token, cancellationToken));
 
+    // ADR-012 PR6d: the requester-facing My Requests view.
+    [HttpGet("overrides/mine")]
+    public Task<IActionResult> ListMineOverrides(CancellationToken cancellationToken) =>
+        RelayList("overrides/mine", token => capabilityRegistry.ListMineOverridesAsync(token, cancellationToken));
+
+    [HttpGet("exceptions/mine")]
+    public Task<IActionResult> ListMineExceptions(CancellationToken cancellationToken) =>
+        RelayList("exceptions/mine", token => capabilityRegistry.ListMineExceptionsAsync(token, cancellationToken));
+
+    [HttpPost("{moduleId}/{portfolioId}/override/{requestId}/withdraw")]
+    public Task<IActionResult> WithdrawOverride(
+        string moduleId, string portfolioId, string requestId,
+        CancellationToken cancellationToken) =>
+        Relay(moduleId, portfolioId, "override/withdraw",
+            token => capabilityRegistry.WithdrawOverrideAsync(moduleId, portfolioId, requestId, token, cancellationToken));
+
     private async Task<IActionResult> RelayList(string action, Func<string?, Task<(int StatusCode, string Body)>> call)
     {
         var bearerToken = Request.Headers.Authorization.ToString();

@@ -21,6 +21,11 @@ const capabilityOverrideException = new CapabilityOverrideExceptionController();
 router.get('/overrides/pending', authenticateToken, capabilityOverride.listPending);
 router.get('/exceptions/pending', authenticateToken, capabilityOverrideException.listPending);
 
+// ADR-012 PR6d: the requester-facing My Requests view -- same 2-segment-before-generic
+// ordering requirement as the pending-queue routes above.
+router.get('/overrides/mine', authenticateToken, capabilityOverride.listMine);
+router.get('/exceptions/mine', authenticateToken, capabilityOverrideException.listMine);
+
 // ADR-012 Action Item 3: the Governor Portal's Capability Register page. A 0-segment
 // path, so no ordering conflict with the 2-segment routes above/below it -- grouped
 // here anyway since it's the other authenticated, human-facing list route.
@@ -43,6 +48,9 @@ router.post('/:moduleId/:portfolioId/promote', authenticateToken, capabilityRegi
 router.post('/:moduleId/:portfolioId/override/request', authenticateToken, capabilityOverride.request);
 router.post('/:moduleId/:portfolioId/override/:requestId/approve', authenticateToken, capabilityOverride.approve);
 router.post('/:moduleId/:portfolioId/override/:requestId/deny', authenticateToken, capabilityOverride.deny);
+// ADR-012 PR6d: requester-initiated, narrower authorization than approve/deny -- see
+// CapabilityOverrideController.withdraw's own docs.
+router.post('/:moduleId/:portfolioId/override/:requestId/withdraw', authenticateToken, capabilityOverride.withdraw);
 
 // ADR-005 Phase 3 task 6: break-glass structural-deadlock substitute -- see
 // CapabilityOverrideExceptionController's own docs.
