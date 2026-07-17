@@ -16,7 +16,9 @@ export interface DepartmentMembershipScopeColumns {
  * fragment does not renumber or introduce its own parameters. `portfolioColumn`/
  * `departmentColumn` are always literal, developer-supplied SQL identifiers (never
  * request input), the same trust level as every other hardcoded column reference in this
- * module's queries.
+ * module's queries -- CWE-89 defense-in-depth: validated against a plain
+ * `identifier` / `alias.identifier` pattern regardless, since this is a shared helper
+ * future callers aren't guaranteed to keep that discipline the way today's two do.
  *
  * Deliberately NOT a consumer for exceptions/pending: CapabilityOverrideExceptionRepository.
  * listPendingForUser authorizes by named-reviewer-assignment (a row in
@@ -24,9 +26,23 @@ export interface DepartmentMembershipScopeColumns {
  * see ADR-012 §A's corrected note.
  */
 export function buildAdminOrActiveDepartmentMemberClause(columns: DepartmentMembershipScopeColumns): string {
+  assertSqlIdentifier(columns.portfolioColumn, 'portfolioColumn');
+  assertSqlIdentifier(columns.departmentColumn, 'departmentColumn');
+
   return `($1::boolean = true OR EXISTS (
         SELECT 1 FROM user_departments ud
         WHERE ud.user_id = $2 AND ud.portfolio_id = ${columns.portfolioColumn}
           AND ud.department = ${columns.departmentColumn} AND ud.is_active = true
       ))`;
+}
+
+const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$/;
+
+function assertSqlIdentifier(value: string, paramName: string): void {
+  if (!SQL_IDENTIFIER_PATTERN.test(value)) {
+    throw new Error(
+      `buildAdminOrActiveDepartmentMemberClause: ${paramName} "${value}" is not a plain SQL identifier ` +
+        `("column" or "alias.column") -- refusing to interpolate it into a query.`
+    );
+  }
 }

@@ -43,6 +43,32 @@ describe('federated-capability-ownership: departmentScopedQuery', () => {
       expect((clause.match(/\$2/g) ?? []).length).toBe(1);
       expect(clause).not.toContain('$3');
     });
+
+    // CWE-89 defense-in-depth (review finding on PR #741): a shared helper's future
+    // callers aren't guaranteed to keep today's "always a hardcoded literal" discipline.
+    it('accepts a plain column identifier with no table alias', () => {
+      expect(() =>
+        buildAdminOrActiveDepartmentMemberClause({ portfolioColumn: 'portfolio_id', departmentColumn: 'department' })
+      ).not.toThrow();
+    });
+
+    it('rejects a portfolioColumn that is not a plain identifier or alias.identifier', () => {
+      expect(() =>
+        buildAdminOrActiveDepartmentMemberClause({
+          portfolioColumn: 'cr.portfolio_id; DROP TABLE user_departments;--',
+          departmentColumn: 'r.requested_by_department'
+        })
+      ).toThrow(/not a plain SQL identifier/);
+    });
+
+    it('rejects a departmentColumn containing whitespace or SQL syntax', () => {
+      expect(() =>
+        buildAdminOrActiveDepartmentMemberClause({
+          portfolioColumn: 'cr.portfolio_id',
+          departmentColumn: '(SELECT 1)'
+        })
+      ).toThrow(/not a plain SQL identifier/);
+    });
   });
 
   // REQ-CAP-010: CapabilityOverrideRequestRepository.listPendingForUser now consumes the
