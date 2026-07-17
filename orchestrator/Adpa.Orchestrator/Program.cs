@@ -122,6 +122,17 @@ builder.Services.AddHttpClient<CapabilityRegistryClient>(client =>
 });
 
 // ---------------------------------------------------------------------------
+// 4b. Current-user profile (ADR-012 PR1 — same Node backend host as the
+//     capability registry, just a different route: GET /api/v1/auth/me)
+// ---------------------------------------------------------------------------
+
+builder.Services.AddHttpClient<CurrentUserClient>(client =>
+{
+    client.BaseAddress = new Uri(CapabilityRegistryUrlResolver.Resolve(builder.Configuration, builder.Environment));
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
+// ---------------------------------------------------------------------------
 // 5. Domain Services (Semantic RTM)
 // ---------------------------------------------------------------------------
 
