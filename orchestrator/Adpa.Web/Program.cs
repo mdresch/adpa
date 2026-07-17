@@ -34,6 +34,11 @@ builder.Services.AddHttpClient("api", client =>
     // client makes -- see FirebaseBearerTokenHandler's own docs.
     .AddHttpMessageHandler<FirebaseBearerTokenHandler>();
 
+// ADR-012 PR1: resolves the caller's role + active department memberships via
+// CurrentUserController -> Node's /api/v1/auth/me. Scoped, not singleton -- one
+// resolution per circuit, not shared across signed-in users.
+builder.Services.AddScoped<CurrentUserService>();
+
 // ---------------------------------------------------------------------------
 // 2a. Authentication (ADR-009: server-side Firebase sign-in for the Governor Portal)
 // ---------------------------------------------------------------------------
