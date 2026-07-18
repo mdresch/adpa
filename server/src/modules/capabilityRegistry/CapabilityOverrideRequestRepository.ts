@@ -115,9 +115,30 @@ export class CapabilityOverrideRequestRepository {
    * the procedure performs its own UPDATE and its own audit_log insert atomically in
    * one DB call, so there's no TS-managed transaction or bare UPDATE left here to get
    * wrong. p_reason is NULL for an approval (this method never took a reason param).
+   * The concurrency/locking fix PR3 (#742) added to this method's old direct-UPDATE
+   * body is superseded, not lost -- decide_capability_request has always used
+   * `SELECT ... FOR UPDATE` plus a `status <> 'pending'` check of its own (migration
+   * 445), so the same protection exists one layer deeper now.
+   *
+   * Optional `runner` (review finding, PR #742/#744/#746/#748): `CapabilityOverrideController
+   * .approve` calls `promote_capability_status` and this method as two separate
+   * autocommit statements. If this call fails after the capability was already
+   * promoted, or a concurrent `withdraw` decides the request between the two calls,
+   * the capability transition and the request's own status can disagree -- an active
+   * capability with a still-pending (or withdrawn) request behind it. The controller
+   * now opens one client/transaction wrapping both calls and passes that client in
+   * here so both writes commit or roll back together; a bare `repo.markApproved(...)`
+   * with no fifth argument still works standalone (falls back to `this.pool`, its own
+   * implicit transaction) for any caller that doesn't need cross-statement atomicity.
    */
-  async markApproved(id: string, approvedBy: string, approvedByDepartment: string, overrideExpiresAt: Date): Promise<void> {
-    await this.pool.query(`SELECT decide_capability_request($1, 'approved', $2, $3, NULL, $4)`, [
+  async markApproved(
+    id: string,
+    approvedBy: string,
+    approvedByDepartment: string,
+    overrideExpiresAt: Date,
+    runner: Pick<Pool, 'query'> = this.pool
+  ): Promise<void> {
+    await runner.query(`SELECT decide_capability_request($1, 'approved', $2, $3, NULL, $4)`, [
       id,
       approvedBy,
       approvedByDepartment,

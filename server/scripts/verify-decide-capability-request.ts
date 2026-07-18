@@ -14,10 +14,12 @@
  * Run: cd server && npx tsx --require dotenv/config scripts/verify-decide-capability-request.ts
  */
 import { randomUUID } from 'crypto';
+import { PoolClient } from 'pg';
 import { connectDatabase, getDatabasePool, getDatabasePoolSafe } from '../src/database/connection';
 
 let passed = 0;
 let failed = 0;
+let savepointCounter = 0;
 
 function ok(label: string) {
   passed++;
@@ -29,7 +31,20 @@ function fail(label: string, detail: unknown) {
   console.error(`  ❌ ${label}`, detail);
 }
 
-async function expectThrows(label: string, fn: () => Promise<unknown>, messagePattern: RegExp) {
+/**
+ * Review finding (PR #745/#747): the whole script runs inside one outer transaction
+ * (always ROLLBACK'd at the very end -- see main()'s finally block), but a raw
+ * `catch` around an expected PostgreSQL error does NOT recover the transaction --
+ * Postgres aborts the entire transaction on the first error, and every subsequent
+ * statement (including a later case's own createRequest()) fails with "current
+ * transaction is aborted" instead of running at all. Wrapping each expected-failure
+ * case in its own SAVEPOINT/ROLLBACK TO SAVEPOINT contains the abort to just that
+ * case, so later cases (including PR6c's REQ-CAP-6C-* checks appended after this
+ * function) actually execute instead of failing for the wrong reason.
+ */
+async function expectThrows(client: PoolClient, label: string, fn: () => Promise<unknown>, messagePattern: RegExp) {
+  const savepoint = `sp_expect_throws_${++savepointCounter}`;
+  await client.query(`SAVEPOINT ${savepoint}`);
   try {
     await fn();
     fail(label, 'expected an exception, none was thrown');
@@ -40,6 +55,9 @@ async function expectThrows(label: string, fn: () => Promise<unknown>, messagePa
     } else {
       fail(label, `wrong exception: ${message}`);
     }
+  } finally {
+    await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
   }
 }
 
@@ -68,9 +86,15 @@ async function main() {
       `INSERT INTO users (email, password_hash, name, role) VALUES ($1, 'x', 'Verify Outsider', 'user') RETURNING id`,
       [outsiderEmail]
     );
+    const wrongDeptEmail = `verify-decide-wrongdept-${suffix}@example.com`;
+    const wrongDeptUser = await client.query(
+      `INSERT INTO users (email, password_hash, name, role) VALUES ($1, 'x', 'Verify Wrong Department', 'user') RETURNING id`,
+      [wrongDeptEmail]
+    );
     const requesterId = requester.rows[0].id;
     const approverId = approver.rows[0].id;
     const outsiderId = outsider.rows[0].id;
+    const wrongDeptUserId = wrongDeptUser.rows[0].id;
 
     const company = await client.query(`INSERT INTO companies (name) VALUES ($1) RETURNING id`, [
       `Verify Decide Co ${suffix}`
@@ -87,6 +111,11 @@ async function main() {
     await client.query(
       `INSERT INTO user_departments (user_id, portfolio_id, department, department_role) VALUES ($1, $2, 'Compliance', 'member')`,
       [approverId, portfolioId]
+    );
+    // Active in Legal, NOT Compliance -- the capability below is Compliance-owned.
+    await client.query(
+      `INSERT INTO user_departments (user_id, portfolio_id, department, department_role) VALUES ($1, $2, 'Legal', 'member')`,
+      [wrongDeptUserId, portfolioId]
     );
 
     const capability = await client.query(
@@ -173,6 +202,7 @@ async function main() {
     {
       const requestId = await createRequest();
       await expectThrows(
+        client,
         'REQ-CAP-6A-004: a non-requester cannot withdraw',
         () => client.query(`SELECT decide_capability_request($1, 'withdrawn', $2, NULL, NULL, NULL)`, [requestId, outsiderId]),
         /only the requester may withdraw/
@@ -181,6 +211,7 @@ async function main() {
     {
       const requestId = await createRequest();
       await expectThrows(
+        client,
         'REQ-CAP-6A-005: the requester cannot approve their own request',
         () => client.query(`SELECT decide_capability_request($1, 'approved', $2, 'Compliance', $3, $4)`, [
           requestId,
@@ -194,6 +225,7 @@ async function main() {
     {
       const requestId = await createRequest();
       await expectThrows(
+        client,
         'REQ-CAP-6A-006: a non-department-member cannot approve',
         () => client.query(`SELECT decide_capability_request($1, 'approved', $2, 'Compliance', $3, $4)`, [
           requestId,
@@ -213,6 +245,7 @@ async function main() {
         new Date()
       ]);
       await expectThrows(
+        client,
         'REQ-CAP-6A-007: an already-decided request cannot be decided again',
         () => client.query(`SELECT decide_capability_request($1, 'denied', $2, 'Compliance', $3, NULL)`, [
           requestId,
@@ -222,11 +255,40 @@ async function main() {
         /has already been decided/
       );
     }
+    {
+      const requestId = await createRequest();
+      await expectThrows(
+        client,
+        'REQ-CAP-6A-008: an active member of a DIFFERENT department cannot approve, even claiming their own department',
+        () => client.query(`SELECT decide_capability_request($1, 'approved', $2, 'Legal', $3, $4)`, [
+          requestId,
+          wrongDeptUserId,
+          'wrong department attempt',
+          new Date()
+        ]),
+        /does not match this capability's functional owner department/
+      );
+    }
+    {
+      const requestId = await createRequest();
+      await expectThrows(
+        client,
+        'REQ-CAP-6A-009: a NULL decision is rejected, not silently treated as withdrawn',
+        () => client.query(`SELECT decide_capability_request($1, NULL, $2, 'Compliance', $3, $4)`, [
+          requestId,
+          approverId,
+          'null decision attempt',
+          new Date()
+        ]),
+        /invalid decision/
+      );
+    }
 
     // --- PR6c: decision-column trigger lockdown (migration 446) ---
     {
       const requestId = await createRequest();
       await expectThrows(
+        client,
         'REQ-CAP-6C-001: a direct UPDATE of status bypassing the procedure is rejected',
         () => client.query(`UPDATE capability_override_requests SET status = 'approved' WHERE id = $1`, [requestId]),
         /decision columns may only be changed via decide_capability_request/
@@ -235,6 +297,7 @@ async function main() {
     {
       const requestId = await createRequest();
       await expectThrows(
+        client,
         'REQ-CAP-6C-002: a direct UPDATE of another guarded column (denial_reason) is also rejected',
         () => client.query(`UPDATE capability_override_requests SET denial_reason = 'sneaking this in' WHERE id = $1`, [requestId]),
         /decision columns may only be changed via decide_capability_request/

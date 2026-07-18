@@ -219,7 +219,7 @@ export class CapabilityOverrideExceptionController {
         });
       }
 
-      const updated = await this.exceptions.decideReview(reviewId, decision, notes ?? null);
+      const updated = await this.exceptions.decideReview(reviewId, decision, notes ?? null, caller.id);
 
       if (decision === 'declined') {
         const allReviews = await this.exceptions.listReviews(exceptionId);
