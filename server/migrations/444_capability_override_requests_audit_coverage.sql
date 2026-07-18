@@ -19,10 +19,16 @@
 -- needed beyond casting through jsonb -- IMMUTABLE is honest here because
 -- jsonb text serialization is a pure function of the input value.
 
+-- search_path pinned (review finding, PR #742): without it, this canonical
+-- integrity primitive resolves `digest()` through whatever search_path the
+-- calling session happens to have, rather than always the same pgcrypto
+-- installation -- the same defense-in-depth reasoning promote_capability_status
+-- and decide_capability_request already apply to themselves.
 CREATE OR REPLACE FUNCTION public.capability_row_digest(p_row jsonb)
 RETURNS text
 LANGUAGE sql
 IMMUTABLE
+SET search_path = public, pg_temp
 AS $function$
   SELECT encode(digest(p_row::text, 'sha256'), 'hex')
 $function$;
