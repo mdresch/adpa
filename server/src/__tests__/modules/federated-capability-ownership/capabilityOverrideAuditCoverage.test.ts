@@ -148,6 +148,37 @@ describe('federated-capability-ownership: capabilityOverrideAuditCoverage', () =
       const sqlSeq = (client.query as jest.Mock).mock.calls.map(([sql]) => sql.trim());
       expect(sqlSeq[sqlSeq.length - 1]).toMatch(/^ROLLBACK/i);
     });
+
+    // REQ-CAP-011 regression (review finding, PR #742): the original SELECT (pre-image)
+    // had no FOR UPDATE and the UPDATE had no expected-status predicate -- two concurrent
+    // decisions on one request could both digest the same "pending" pre-image and the
+    // second write would silently overwrite the first while recording a false old-value
+    // digest. Locks the row on read and requires status='pending' on write; a losing
+    // concurrent caller sees 0 rows affected and the whole transaction rolls back.
+    it('markApproved() locks the row (FOR UPDATE) and throws without writing anything if already decided', async () => {
+      const client = {
+        query: jest.fn(async (sql: string) => {
+          const s = sql.trim();
+          if (/^BEGIN|^ROLLBACK/i.test(s)) return {};
+          if (/SELECT \* FROM capability_override_requests WHERE id = \$1 FOR UPDATE/i.test(s)) {
+            return { rows: [{ id: 'req-1', status: 'denied' }] };
+          }
+          if (/UPDATE capability_override_requests/i.test(s)) {
+            // AND status = 'pending' predicate: already-decided row means 0 rows affected
+            return { rows: [] };
+          }
+          throw new Error(`unexpected query in already-decided guard test: ${s}`);
+        }),
+        release: jest.fn()
+      };
+      const repo = new CapabilityOverrideRequestRepository(poolWithClient(client));
+
+      await expect(repo.markApproved('req-1', 'approver-1', 'Compliance', new Date())).rejects.toThrow(
+        /already been decided/
+      );
+      expect((client.query as jest.Mock).mock.calls.some(([sql]) => /^ROLLBACK/i.test(sql.trim()))).toBe(true);
+      expect((client.query as jest.Mock).mock.calls.some(([sql]) => /INSERT INTO audit_log/i.test(sql))).toBe(false);
+    });
   });
 
   // REQ-CAP-011: CapabilityOverrideExceptionRepository writes now transactionally audited
@@ -175,7 +206,7 @@ describe('federated-capability-ownership: capabilityOverrideAuditCoverage', () =
       const client = fakeClient();
       const repo = new CapabilityOverrideExceptionRepository(poolWithClient(client));
 
-      await repo.decideReview('rev-1', 'approved', null);
+      await repo.decideReview('rev-1', 'approved', null, 'user-2');
 
       const sqlSeq = (client.query as jest.Mock).mock.calls.map(([sql]) => sql.trim());
       expect(sqlSeq[0]).toMatch(/^BEGIN/i);
@@ -188,10 +219,65 @@ describe('federated-capability-ownership: capabilityOverrideAuditCoverage', () =
       const client = fakeClient({ failOnAuditInsert: true });
       const repo = new CapabilityOverrideExceptionRepository(poolWithClient(client));
 
-      await expect(repo.decideReview('rev-1', 'declined', 'not enough evidence')).rejects.toThrow();
+      await expect(repo.decideReview('rev-1', 'declined', 'not enough evidence', 'user-2')).rejects.toThrow();
 
       const sqlSeq = (client.query as jest.Mock).mock.calls.map(([sql]) => sql.trim());
       expect(sqlSeq[sqlSeq.length - 1]).toMatch(/^ROLLBACK/i);
+    });
+
+    // REQ-CAP-011 regression (review finding, PR #742/#744): decideReview must record the
+    // authenticated caller as audit_log.actor_user_id, not the review's own
+    // reviewer_user_id -- those diverge for an Internal-Audit member proxying an
+    // external_auditor decision, where reviewer_user_id is NULL by design.
+    it('decideReview() records the authenticated caller as the audit actor, not reviewer_user_id -- even when reviewer_user_id is null (external_auditor proxy)', async () => {
+      const auditInserts: any[] = [];
+      const client = {
+        query: jest.fn(async (sql: string, params: any[] = []) => {
+          const s = sql.trim();
+          if (/^BEGIN|^COMMIT|^ROLLBACK/i.test(s)) return {};
+          if (/SELECT \* FROM override_exception_reviews WHERE id = \$1/i.test(s)) {
+            return { rows: [{ id: 'rev-proxy', exception_id: 'exc-1', reviewer_user_id: null, decision: null }] };
+          }
+          if (/UPDATE override_exception_reviews/i.test(s)) {
+            return { rows: [{ id: 'rev-proxy', exception_id: 'exc-1', reviewer_user_id: null, decision: 'approved' }] };
+          }
+          if (/INSERT INTO audit_log/i.test(s)) {
+            auditInserts.push(params);
+            return {};
+          }
+          return { rows: [] };
+        }),
+        release: jest.fn()
+      };
+      const repo = new CapabilityOverrideExceptionRepository(poolWithClient(client));
+
+      await repo.decideReview('rev-proxy', 'approved', 'recorded on behalf of external auditor', 'internal-audit-user-9');
+
+      // insertAuditLogDigest's param order: [tableName, rowId, action, actorUserId, oldDigest, newDigest]
+      expect(auditInserts[0][3]).toBe('internal-audit-user-9');
+      expect(auditInserts[0][3]).not.toBeNull();
+    });
+
+    it('decideReview() throws without writing anything if the review was already decided (concurrent-decision guard)', async () => {
+      const client = {
+        query: jest.fn(async (sql: string) => {
+          const s = sql.trim();
+          if (/^BEGIN|^ROLLBACK/i.test(s)) return {};
+          if (/SELECT \* FROM override_exception_reviews WHERE id = \$1/i.test(s)) {
+            return { rows: [{ id: 'rev-1', exception_id: 'exc-1', reviewer_user_id: 'user-2', decision: 'approved' }] };
+          }
+          if (/UPDATE override_exception_reviews/i.test(s)) {
+            // AND decision IS NULL predicate: already-decided row means 0 rows affected
+            return { rows: [] };
+          }
+          throw new Error(`unexpected query in already-decided guard test: ${s}`);
+        }),
+        release: jest.fn()
+      };
+      const repo = new CapabilityOverrideExceptionRepository(poolWithClient(client));
+
+      await expect(repo.decideReview('rev-1', 'approved', null, 'user-3')).rejects.toThrow(/already been decided/);
+      expect((client.query as jest.Mock).mock.calls.some(([sql]) => /^ROLLBACK/i.test(sql.trim()))).toBe(true);
     });
   });
 });
