@@ -141,26 +141,52 @@ export class CapabilityOverrideController {
 
       const overrideExpiresAt = new Date(Date.now() + getOverrideWindowHours() * 60 * 60 * 1000);
 
-      await pool.query(
-        `SELECT promote_capability_status($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          capability.id,
-          overrideRequest.requestedNewStatus,
+      // Review finding (PR #742/#744): promote_capability_status and the request's own
+      // decision were previously two separate autocommit statements -- a failure or a
+      // concurrent decision between them could leave the capability promoted with the
+      // request still pending. One client/transaction wrapping both means either both
+      // commit or neither does; markApproved's own SELECT ... FOR UPDATE still locks the
+      // request row for the whole transaction's duration, so a concurrent decision blocks
+      // until this commits or rolls back, then correctly fails on the now-decided row.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `SELECT promote_capability_status($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            capability.id,
+            overrideRequest.requestedNewStatus,
+            approver.id,
+            overrideRequest.justification,
+            overrideRequest.dracoVerdictId,
+            true,
+            overrideExpiresAt
+          ]
+        );
+        await this.overrideRequests.markApproved(
+          requestId,
           approver.id,
-          overrideRequest.justification,
-          overrideRequest.dracoVerdictId,
-          true,
-          overrideExpiresAt
-        ]
-      );
-
-      await this.overrideRequests.markApproved(requestId, approver.id, capability.functionalOwnerDepartment, overrideExpiresAt);
+          capability.functionalOwnerDepartment,
+          overrideExpiresAt,
+          client
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
 
       const updated = await this.capabilityRepository.findFullByModuleAndPortfolio(moduleId, portfolioId);
       res.json({ capability: updated, overrideRequest: await this.overrideRequests.findById(requestId) });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const isKnownRejection = /illegal activation_status transition|requires a draco_verdict_id|does not reference an existing draco_reviews row|requires an override to activate|requires a non-empty justification|requires override_expires_at to be set|has no active member in portfolio/.test(
+      // "has already been decided" (review finding, PR #742/#744): now that both writes
+      // are one transaction, a losing concurrent decision surfaces here as a real
+      // conflict, not a server fault -- it belongs with the other known-rejection
+      // business-rule messages, not the generic 500 catch-all below.
+      const isKnownRejection = /illegal activation_status transition|requires a draco_verdict_id|does not reference an existing draco_reviews row|requires an override to activate|requires a non-empty justification|requires override_expires_at to be set|has no active member in portfolio|has already been decided/.test(
         message
       );
       if (isKnownRejection) {
