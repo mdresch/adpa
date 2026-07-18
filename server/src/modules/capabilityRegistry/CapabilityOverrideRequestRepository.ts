@@ -115,6 +115,10 @@ export class CapabilityOverrideRequestRepository {
    * the procedure performs its own UPDATE and its own audit_log insert atomically in
    * one DB call, so there's no TS-managed transaction or bare UPDATE left here to get
    * wrong. p_reason is NULL for an approval (this method never took a reason param).
+   * The concurrency/locking fix PR3 (#742) added to this method's old direct-UPDATE
+   * body is superseded, not lost -- decide_capability_request has always used
+   * `SELECT ... FOR UPDATE` plus a `status <> 'pending'` check of its own (migration
+   * 445), so the same protection exists one layer deeper now.
    */
   async markApproved(id: string, approvedBy: string, approvedByDepartment: string, overrideExpiresAt: Date): Promise<void> {
     await this.pool.query(`SELECT decide_capability_request($1, 'approved', $2, $3, NULL, $4)`, [
