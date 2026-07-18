@@ -32,6 +32,9 @@ export interface PendingExceptionRow extends CapabilityOverrideExceptionRow {
   moduleId: string;
   portfolioId: string;
   reviews: OverrideExceptionReviewRow[];
+  /** ADR-012 PR8: this exception's own create-time audit_log row -- decideReview's per-reviewer entries are recorded against override_exception_reviews, not rolled up here. */
+  chainEntryId: string | null;
+  chainRecordedAt: string | null;
 }
 
 function mapException(row: any): CapabilityOverrideExceptionRow {
@@ -227,9 +230,15 @@ export class CapabilityOverrideExceptionRepository {
    */
   async listPendingForUser(userId: string, isAdmin: boolean): Promise<PendingExceptionRow[]> {
     const result = await this.pool.query(
-      `SELECT DISTINCT e.*, cr.module_id, cr.portfolio_id
+      `SELECT DISTINCT e.*, cr.module_id, cr.portfolio_id, chain.id AS chain_entry_id, chain.occurred_at AS chain_recorded_at
        FROM capability_override_exceptions e
        JOIN capability_registry cr ON cr.id = e.capability_id
+       LEFT JOIN LATERAL (
+         SELECT id, occurred_at FROM audit_log al
+         WHERE al.table_name = 'capability_override_exceptions' AND al.row_id = e.id
+         ORDER BY al.occurred_at DESC
+         LIMIT 1
+       ) chain ON true
        WHERE e.exception_review_status IN ('pending', 'escalated')
          AND ($1::boolean = true OR EXISTS (
            SELECT 1 FROM override_exception_reviews rev
@@ -242,7 +251,14 @@ export class CapabilityOverrideExceptionRepository {
     const exceptions: PendingExceptionRow[] = [];
     for (const row of result.rows) {
       const reviews = await this.listReviews(row.id);
-      exceptions.push({ ...mapException(row), moduleId: row.module_id, portfolioId: row.portfolio_id, reviews });
+      exceptions.push({
+        ...mapException(row),
+        moduleId: row.module_id,
+        portfolioId: row.portfolio_id,
+        reviews,
+        chainEntryId: row.chain_entry_id ?? null,
+        chainRecordedAt: row.chain_recorded_at ?? null
+      });
     }
     return exceptions;
   }
@@ -255,9 +271,15 @@ export class CapabilityOverrideExceptionRepository {
    */
   async listOwnExceptions(userId: string): Promise<PendingExceptionRow[]> {
     const result = await this.pool.query(
-      `SELECT e.*, cr.module_id, cr.portfolio_id
+      `SELECT e.*, cr.module_id, cr.portfolio_id, chain.id AS chain_entry_id, chain.occurred_at AS chain_recorded_at
        FROM capability_override_exceptions e
        JOIN capability_registry cr ON cr.id = e.capability_id
+       LEFT JOIN LATERAL (
+         SELECT id, occurred_at FROM audit_log al
+         WHERE al.table_name = 'capability_override_exceptions' AND al.row_id = e.id
+         ORDER BY al.occurred_at DESC
+         LIMIT 1
+       ) chain ON true
        WHERE e.raised_by = $1
        ORDER BY e.raised_at DESC`,
       [userId]
@@ -266,7 +288,14 @@ export class CapabilityOverrideExceptionRepository {
     const exceptions: PendingExceptionRow[] = [];
     for (const row of result.rows) {
       const reviews = await this.listReviews(row.id);
-      exceptions.push({ ...mapException(row), moduleId: row.module_id, portfolioId: row.portfolio_id, reviews });
+      exceptions.push({
+        ...mapException(row),
+        moduleId: row.module_id,
+        portfolioId: row.portfolio_id,
+        reviews,
+        chainEntryId: row.chain_entry_id ?? null,
+        chainRecordedAt: row.chain_recorded_at ?? null
+      });
     }
     return exceptions;
   }

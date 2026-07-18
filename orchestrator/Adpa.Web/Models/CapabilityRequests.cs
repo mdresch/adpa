@@ -31,6 +31,12 @@ public sealed class PendingOverride
     [JsonPropertyName("decidedAt")] public DateTimeOffset? DecidedAt { get; set; }
     [JsonPropertyName("denialReason")] public string? DenialReason { get; set; }
     [JsonPropertyName("withdrawnAt")] public DateTimeOffset? WithdrawnAt { get; set; }
+
+    // ADR-012 PR8: the latest audit_log row for this request (create while pending,
+    // the decide_capability_request entry once decided) -- see
+    // CapabilityOverrideRequestRepository.listPendingForUser/listOwnRequests.
+    [JsonPropertyName("chainEntryId")] public string? ChainEntryId { get; set; }
+    [JsonPropertyName("chainRecordedAt")] public DateTimeOffset? ChainRecordedAt { get; set; }
 }
 
 public sealed class PendingExceptionsResponse
@@ -47,6 +53,12 @@ public sealed class PendingException
     [JsonPropertyName("justification")] public string Justification { get; set; } = string.Empty;
     [JsonPropertyName("raisedAt")] public DateTimeOffset RaisedAt { get; set; }
     [JsonPropertyName("reviews")] public List<ExceptionReview> Reviews { get; set; } = new();
+
+    // ADR-012 PR8: this exception's own create-time audit_log row -- decideReview's
+    // per-reviewer entries are recorded against override_exception_reviews, not
+    // rolled up here. See CapabilityOverrideExceptionRepository.listPendingForUser/listOwnExceptions.
+    [JsonPropertyName("chainEntryId")] public string? ChainEntryId { get; set; }
+    [JsonPropertyName("chainRecordedAt")] public DateTimeOffset? ChainRecordedAt { get; set; }
 }
 
 public sealed class ExceptionReview

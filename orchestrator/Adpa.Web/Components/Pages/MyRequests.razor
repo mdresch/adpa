@@ -47,9 +47,13 @@ else
                             <div>Requested <b style="color:var(--gp-ink);">@item.RequestedAt.ToString("yyyy-MM-dd HH:mm")</b> UTC</div>
                         </div>
 
+                        <ChainProvenanceMarker ChainEntryId="@item.ChainEntryId" ChainRecordedAt="@item.ChainRecordedAt" />
+
                         @if (item.Status == "pending")
                         {
-                            <PillButton Variant="PillButton.ButtonVariant.Secondary" OnClick="@(() => Withdraw(item))">Withdraw</PillButton>
+                            <div class="mt-2">
+                                <PillButton Variant="PillButton.ButtonVariant.Secondary" OnClick="@(() => Withdraw(item))">Withdraw</PillButton>
+                            </div>
                         }
                     </GovernorCard>
                 </div>
@@ -81,6 +85,8 @@ else
                         <JustificationBlock>@item.Justification</JustificationBlock>
 
                         <ReviewerStrip Reviewers="@BuildReviewerStatuses(item)" />
+
+                        <ChainProvenanceMarker ChainEntryId="@item.ChainEntryId" ChainRecordedAt="@item.ChainRecordedAt" />
                     </GovernorCard>
                 </div>
             }
