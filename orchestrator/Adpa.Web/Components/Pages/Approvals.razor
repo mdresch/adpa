@@ -47,7 +47,9 @@ else
                             <div>Requested <b style="color:var(--gp-ink);">@item.RequestedAt.ToString("yyyy-MM-dd HH:mm")</b> UTC</div>
                         </div>
 
-                        <div class="d-flex gap-2">
+                        <ChainProvenanceMarker ChainEntryId="@item.ChainEntryId" ChainRecordedAt="@item.ChainRecordedAt" />
+
+                        <div class="d-flex gap-2 mt-2">
                             <PillButton Variant="PillButton.ButtonVariant.Approve" OnClick="@(() => ApproveOverride(item))">Approve override</PillButton>
                             <PillButton Variant="PillButton.ButtonVariant.Deny" OnClick="@(() => DenyOverride(item))">Deny</PillButton>
                         </div>
@@ -80,6 +82,8 @@ else
                         <JustificationBlock>@item.Justification</JustificationBlock>
 
                         <ReviewerStrip Reviewers="@BuildReviewerStatuses(item)" />
+
+                        <ChainProvenanceMarker ChainEntryId="@item.ChainEntryId" ChainRecordedAt="@item.ChainRecordedAt" />
 
                         <div class="d-flex flex-wrap gap-2 mt-3">
                             @foreach (var review in item.Reviews.Where(r => r.Decision is null))

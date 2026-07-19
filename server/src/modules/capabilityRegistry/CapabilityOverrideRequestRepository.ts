@@ -23,6 +23,9 @@ export interface CapabilityOverrideRequestRow {
 export interface PendingOverrideRequestRow extends CapabilityOverrideRequestRow {
   moduleId: string;
   portfolioId: string;
+  /** ADR-012 PR8: the latest audit_log row for this request (create, or the decide_capability_request entry once decided) -- null only if PR3/PR6c's coverage guarantee has somehow been bypassed. */
+  chainEntryId: string | null;
+  chainRecordedAt: string | null;
 }
 
 function mapRow(row: any): CapabilityOverrideRequestRow {
@@ -46,7 +49,13 @@ function mapRow(row: any): CapabilityOverrideRequestRow {
 }
 
 function mapPendingRow(row: any): PendingOverrideRequestRow {
-  return { ...mapRow(row), moduleId: row.module_id, portfolioId: row.portfolio_id };
+  return {
+    ...mapRow(row),
+    moduleId: row.module_id,
+    portfolioId: row.portfolio_id,
+    chainEntryId: row.chain_entry_id ?? null,
+    chainRecordedAt: row.chain_recorded_at ?? null
+  };
 }
 
 /**
@@ -206,9 +215,15 @@ export class CapabilityOverrideRequestRepository {
       departmentColumn: 'r.requested_by_department'
     });
     const result = await this.pool.query(
-      `SELECT r.*, cr.module_id, cr.portfolio_id
+      `SELECT r.*, cr.module_id, cr.portfolio_id, chain.id AS chain_entry_id, chain.occurred_at AS chain_recorded_at
        FROM capability_override_requests r
        JOIN capability_registry cr ON cr.id = r.capability_id
+       LEFT JOIN LATERAL (
+         SELECT id, occurred_at FROM audit_log al
+         WHERE al.table_name = 'capability_override_requests' AND al.row_id = r.id
+         ORDER BY al.occurred_at DESC
+         LIMIT 1
+       ) chain ON true
        WHERE r.status = 'pending'
          AND ${scopeClause}
        ORDER BY r.requested_at ASC`,
@@ -226,9 +241,15 @@ export class CapabilityOverrideRequestRepository {
    */
   async listOwnRequests(userId: string): Promise<PendingOverrideRequestRow[]> {
     const result = await this.pool.query(
-      `SELECT r.*, cr.module_id, cr.portfolio_id
+      `SELECT r.*, cr.module_id, cr.portfolio_id, chain.id AS chain_entry_id, chain.occurred_at AS chain_recorded_at
        FROM capability_override_requests r
        JOIN capability_registry cr ON cr.id = r.capability_id
+       LEFT JOIN LATERAL (
+         SELECT id, occurred_at FROM audit_log al
+         WHERE al.table_name = 'capability_override_requests' AND al.row_id = r.id
+         ORDER BY al.occurred_at DESC
+         LIMIT 1
+       ) chain ON true
        WHERE r.requested_by = $1
        ORDER BY r.requested_at DESC`,
       [userId]
