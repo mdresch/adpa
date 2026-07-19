@@ -6,6 +6,8 @@ import { AuthRepository } from './AuthRepository';
 import { childLogger } from "../../utils/logger";
 import { trackActivity } from "../../middleware/analyticsMiddleware";
 import { pool } from "../../database/connection";
+import { UserDepartmentRepository } from "../departments/UserDepartmentRepository";
+import { resolveCurrentUserDepartments } from "../departments/currentUserProfile";
 
 /**
  * AuthController (Modular)
@@ -98,6 +100,12 @@ export class AuthController {
   private static get repository() {
     if (!this._repository) this._repository = new AuthRepository();
     return this._repository;
+  }
+
+  private static _userDepartmentRepository: UserDepartmentRepository;
+  private static get userDepartmentRepository() {
+    if (!this._userDepartmentRepository) this._userDepartmentRepository = new UserDepartmentRepository(pool);
+    return this._userDepartmentRepository;
   }
 
   /**
@@ -294,7 +302,7 @@ export class AuthController {
       }
 
       const user = result.rows[0];
-      
+
       // SAFE PERMISSION PARSING: Ensure permissions is an object
       if (typeof user.permissions === 'string') {
         try {
@@ -305,7 +313,11 @@ export class AuthController {
         }
       }
 
-      res.json({ success: true, user });
+      const departments = await resolveCurrentUserDepartments(userId, {
+        listActiveDepartmentsByUser: (id) => AuthController.userDepartmentRepository.listByUser(id)
+      });
+
+      res.json({ success: true, user, departments });
     } catch (error: any) {
       if (error?.code === "DB_CIRCUIT_OPEN") {
         return res.status(503).json({ error: "Service temporarily unavailable" });
@@ -314,7 +326,7 @@ export class AuthController {
         message: error.message,
         stack: error.stack
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Internal server error",
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
