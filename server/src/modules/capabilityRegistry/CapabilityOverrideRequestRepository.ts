@@ -11,12 +11,13 @@ export interface CapabilityOverrideRequestRow {
   requestedBy: string;
   requestedByDepartment: string;
   requestedAt: string;
-  status: 'pending' | 'approved' | 'denied';
+  status: 'pending' | 'approved' | 'denied' | 'withdrawn';
   approvedBy: string | null;
   approvedByDepartment: string | null;
   decidedAt: string | null;
   denialReason: string | null;
   overrideExpiresAt: string | null;
+  withdrawnAt: string | null;
 }
 
 export interface PendingOverrideRequestRow extends CapabilityOverrideRequestRow {
@@ -39,7 +40,8 @@ function mapRow(row: any): CapabilityOverrideRequestRow {
     approvedByDepartment: row.approved_by_department,
     decidedAt: row.decided_at,
     denialReason: row.denial_reason,
-    overrideExpiresAt: row.override_expires_at
+    overrideExpiresAt: row.override_expires_at,
+    withdrawnAt: row.withdrawn_at
   };
 }
 
@@ -165,6 +167,17 @@ export class CapabilityOverrideRequestRepository {
   }
 
   /**
+   * ADR-012 PR6d: a symmetric counterpart to markApproved/markDenied -- also delegates
+   * to decide_capability_request, which enforces requester-only authorization at the DB
+   * layer (decided_by = requested_by, department membership irrelevant). The controller
+   * still checks this itself first, to return a clean 403 instead of a raw DB exception --
+   * see CapabilityOverrideController.withdraw.
+   */
+  async withdraw(id: string, requestedBy: string): Promise<void> {
+    await this.pool.query(`SELECT decide_capability_request($1, 'withdrawn', $2, NULL, NULL, NULL)`, [id, requestedBy]);
+  }
+
+  /**
    * Feeds the override-expiry revert sweep (overrideExpiryCheck.ts /
    * capabilityAttestationJob.ts) — approved requests whose override has since
    * lapsed with no subsequent normal approval are handled there via
@@ -200,6 +213,25 @@ export class CapabilityOverrideRequestRepository {
          AND ${scopeClause}
        ORDER BY r.requested_at ASC`,
       [isAdmin, userId]
+    );
+    return result.rows.map(mapPendingRow);
+  }
+
+  /**
+   * ADR-012 PR6d: feeds the requester-facing My Requests view -- the caller's own
+   * requests regardless of status (pending + decided-or-withdrawn), unlike
+   * listPendingForUser above (which scopes to what OTHERS need to act on). Ordered
+   * newest-first, matching a typical "my activity" view rather than the FIFO queue order
+   * listPendingForUser uses for reviewers working through a backlog.
+   */
+  async listOwnRequests(userId: string): Promise<PendingOverrideRequestRow[]> {
+    const result = await this.pool.query(
+      `SELECT r.*, cr.module_id, cr.portfolio_id
+       FROM capability_override_requests r
+       JOIN capability_registry cr ON cr.id = r.capability_id
+       WHERE r.requested_by = $1
+       ORDER BY r.requested_at DESC`,
+      [userId]
     );
     return result.rows.map(mapPendingRow);
   }

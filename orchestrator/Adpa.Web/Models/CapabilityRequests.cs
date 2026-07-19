@@ -22,6 +22,15 @@ public sealed class PendingOverride
     [JsonPropertyName("justification")] public string Justification { get; set; } = string.Empty;
     [JsonPropertyName("requestedByDepartment")] public string RequestedByDepartment { get; set; } = string.Empty;
     [JsonPropertyName("requestedAt")] public DateTimeOffset RequestedAt { get; set; }
+
+    // ADR-012 PR6d: present on every response (overrides/pending and overrides/mine both
+    // come from the same repository mapping) but only meaningfully consumed by
+    // MyRequests.razor -- Approvals.razor's pending queue implies "status = pending" from
+    // context and doesn't render these. Extending the existing shape, not adding a second one.
+    [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
+    [JsonPropertyName("decidedAt")] public DateTimeOffset? DecidedAt { get; set; }
+    [JsonPropertyName("denialReason")] public string? DenialReason { get; set; }
+    [JsonPropertyName("withdrawnAt")] public DateTimeOffset? WithdrawnAt { get; set; }
 }
 
 public sealed class PendingExceptionsResponse

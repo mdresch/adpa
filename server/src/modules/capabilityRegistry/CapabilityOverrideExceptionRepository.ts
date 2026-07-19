@@ -273,4 +273,28 @@ export class CapabilityOverrideExceptionRepository {
     }
     return exceptions;
   }
+
+  /**
+   * ADR-012 PR6d: feeds the requester-facing My Requests view -- the caller's own
+   * exceptions regardless of status, read-only there (ADR-012 §B: withdraw covers
+   * override requests only; the multi-reviewer exception lifecycle has no self-evident
+   * "withdrawn" meaning once a reviewer has already decided).
+   */
+  async listOwnExceptions(userId: string): Promise<PendingExceptionRow[]> {
+    const result = await this.pool.query(
+      `SELECT e.*, cr.module_id, cr.portfolio_id
+       FROM capability_override_exceptions e
+       JOIN capability_registry cr ON cr.id = e.capability_id
+       WHERE e.raised_by = $1
+       ORDER BY e.raised_at DESC`,
+      [userId]
+    );
+
+    const exceptions: PendingExceptionRow[] = [];
+    for (const row of result.rows) {
+      const reviews = await this.listReviews(row.id);
+      exceptions.push({ ...mapException(row), moduleId: row.module_id, portfolioId: row.portfolio_id, reviews });
+    }
+    return exceptions;
+  }
 }

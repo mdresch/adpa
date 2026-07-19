@@ -84,6 +84,21 @@ export class CapabilityOverrideExceptionController {
     }
   };
 
+  /**
+   * ADR-012 PR6d: feeds the requester-facing My Requests view -- read-only there
+   * (ADR-012 §B: withdraw covers override requests only, not exceptions).
+   */
+  listMine = async (req: Request, res: Response) => {
+    try {
+      const requester = (req as any).user;
+      const mine = await this.exceptions.listOwnExceptions(requester.id);
+      res.json({ exceptions: mine });
+    } catch (error) {
+      this.logger.error('List own override exceptions error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
   request = async (req: Request, res: Response) => {
     try {
       const { moduleId, portfolioId } = req.params;
