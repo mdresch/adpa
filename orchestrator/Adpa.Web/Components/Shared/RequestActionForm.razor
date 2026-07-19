@@ -41,17 +41,17 @@
             }
         </div>
 
-        @if (Mode != ActionMode.Promote)
-        {
-            <div class="mb-3">
-                <label class="form-label" style="font-size:12.5px; color:var(--gp-soft);">DRACO verdict ID (optional)</label>
-                <input class="form-control" @bind="_dracoVerdictId" />
-            </div>
-        }
-        else
-        {
-            <div class="mb-3"></div>
-        }
+        @* Review finding (PR #744): promote_capability_status requires a non-null, existing
+           p_draco_verdict_id for every ->active transition (server/migrations/436_draco_
+           activation_gate.sql). Hiding this field for Promote mode meant a direct promotion
+           to active could never actually succeed -- it would always 400. Shown for every
+           mode now; still optional client-side (ADR-012 §3 defers real DRACO evidence
+           validation/preview here until ADR-005 Item 5's DRACO integration lands), so a
+           promotion targeting a status other than active is unaffected. *@
+        <div class="mb-3">
+            <label class="form-label" style="font-size:12.5px; color:var(--gp-soft);">DRACO verdict ID (optional)</label>
+            <input class="form-control" @bind="_dracoVerdictId" />
+        </div>
 
         <div class="d-flex gap-2">
             @if (Mode == ActionMode.Promote)
@@ -157,7 +157,12 @@
             {
                 response = await client.PostAsJsonAsync(
                     $"api/Capability/{ModuleId}/{PortfolioId}/promote",
-                    new PromoteDraft { NewStatus = _targetStatus, Reason = _justification });
+                    new PromoteDraft
+                    {
+                        NewStatus = _targetStatus,
+                        Reason = _justification,
+                        DracoVerdictId = string.IsNullOrWhiteSpace(_dracoVerdictId) ? null : _dracoVerdictId
+                    });
             }
             else
             {

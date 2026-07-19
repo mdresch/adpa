@@ -97,9 +97,13 @@ else
     // Mirrors promote_capability_status's transition graph exactly (server/migrations/
     // 435_module_activation_lifecycle.sql) so the UI never offers an illegal target status --
     // the DB is still the enforcement point, this just avoids a guaranteed-400 round trip.
+    // Review finding (PR #744): migration 442_capability_registry_draft_disable_transition.sql
+    // added draft -> disabled to the DB's own transition graph (a break-glass decline against
+    // a still-draft capability), but this mirror was never updated to match -- meaning a
+    // legal, DB-supported transition couldn't actually be selected from this page at all.
     private static List<string> AllowedNextStatuses(string currentStatus) => currentStatus switch
     {
-        "draft" => new List<string> { "pending_department_approval" },
+        "draft" => new List<string> { "pending_department_approval", "disabled" },
         "pending_department_approval" => new List<string> { "active", "disabled" },
         "active" => new List<string> { "pending_re_approval", "disabled" },
         "pending_re_approval" => new List<string> { "active", "disabled" },

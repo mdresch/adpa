@@ -133,6 +133,13 @@ export class CapabilityOverrideRequestRepository {
    * here so both writes commit or roll back together; a bare `repo.markApproved(...)`
    * with no fifth argument still works standalone (falls back to `this.pool`, its own
    * implicit transaction) for any caller that doesn't need cross-statement atomicity.
+   *
+   * (PR5's independent copy of this same fix -- markApproved's own transactional
+   * SELECT/UPDATE shape with an `externalClient` parameter -- is superseded here, not
+   * lost: PR6b already replaced that shape entirely with delegation to
+   * `decide_capability_request`, which has its own `FOR UPDATE`/`status <> 'pending'`
+   * protection one layer deeper. See PR5's own commit for why it needed an independent
+   * fix in the first place: that branch doesn't descend from PR6a/PR6b.)
    */
   async markApproved(
     id: string,
