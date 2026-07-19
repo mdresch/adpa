@@ -11,7 +11,7 @@
  */
 
 const db = require('../lib/db');
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto'
 import { logger } from '../utils/logger';
 import { aiRecommendationsService } from './aiRecommendationsService';
 import type { AIRecommendation, GeneratedRecommendations } from './aiRecommendationsService';

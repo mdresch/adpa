@@ -94,6 +94,22 @@ interface DocumentVersion {
   created_by: string
 }
 
+// Full-screen reading mode's typeset wrapper (see .agents/skills/adpa-typeset-markdown-styling/SKILL.md)
+// maps the existing fontSize/lineHeight reader controls onto typeset's CSS custom properties as inline
+// per-instance overrides, since typeset has no Tailwind prose-*-style modifier classes to swap between.
+const TYPESET_FONT_SIZE_MAP: Record<'sm' | 'base' | 'lg' | 'xl', string> = {
+  sm: '13px',
+  base: '15px',
+  lg: '17px',
+  xl: '19px',
+}
+
+const TYPESET_LINE_HEIGHT_MAP: Record<'tight' | 'normal' | 'relaxed', string> = {
+  tight: '1.4',
+  normal: '1.6',
+  relaxed: '1.8',
+}
+
 export default function DocumentViewerPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
@@ -919,13 +935,14 @@ ${doc.content}
                       </div>
                     </div>
                     <div className="h-full overflow-y-auto p-8">
-                      <div className={`prose max-w-4xl mx-auto ${fontSize === 'sm' ? 'prose-sm' :
-                        fontSize === 'lg' ? 'prose-lg' :
-                          fontSize === 'xl' ? 'prose-xl' : 'prose-base'
-                        } ${lineHeight === 'tight' ? 'prose-tight' :
-                          lineHeight === 'relaxed' ? 'prose-relaxed' : ''
-                        }`}>
-                        <MarkdownRenderer content={document.content} />
+                      <div
+                        className="typeset typeset-docs max-w-[42em] mx-auto"
+                        style={{
+                          '--typeset-size': TYPESET_FONT_SIZE_MAP[fontSize],
+                          '--typeset-leading': TYPESET_LINE_HEIGHT_MAP[lineHeight],
+                        } as React.CSSProperties}
+                      >
+                        <MarkdownRenderer content={document.content} variant="typeset" />
                       </div>
                     </div>
                   </div>

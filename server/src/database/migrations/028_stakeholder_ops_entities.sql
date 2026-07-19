@@ -1,8 +1,10 @@
 -- Stakeholder Operations Domain Entities
 
 -- Stakeholder Engagements (Events/Touchpoints)
-DROP TABLE IF EXISTS stakeholder_engagements CASCADE;
-CREATE TABLE stakeholder_engagements (
+-- (DROP TABLE removed: stakeholder_engagements already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS stakeholder_engagements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   stakeholder_name VARCHAR(255),
@@ -20,8 +22,10 @@ CREATE TABLE stakeholder_engagements (
 CREATE INDEX IF NOT EXISTS idx_stakeholder_engagements_project_id ON stakeholder_engagements(project_id);
 
 -- Communication Logs
-DROP TABLE IF EXISTS communication_logs CASCADE;
-CREATE TABLE communication_logs (
+-- (DROP TABLE removed: communication_logs already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS communication_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   sender VARCHAR(255),
@@ -40,8 +44,10 @@ CREATE TABLE communication_logs (
 CREATE INDEX IF NOT EXISTS idx_communication_logs_project_id ON communication_logs(project_id);
 
 -- Action Items
-DROP TABLE IF EXISTS action_items CASCADE;
-CREATE TABLE action_items (
+-- (DROP TABLE removed: action_items already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS action_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   item_id VARCHAR(50),
@@ -60,8 +66,10 @@ CREATE TABLE action_items (
 CREATE INDEX IF NOT EXISTS idx_action_items_project_id ON action_items(project_id);
 
 -- Meeting Minutes
-DROP TABLE IF EXISTS meeting_minutes CASCADE;
-CREATE TABLE meeting_minutes (
+-- (DROP TABLE removed: meeting_minutes already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS meeting_minutes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   meeting_title VARCHAR(255) NOT NULL,

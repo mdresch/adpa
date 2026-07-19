@@ -139,7 +139,7 @@ export class AnalysisRepository {
         updated_at = NOW()
       RETURNING id, name, provider_type, is_active, created_at, updated_at
     `;
-    const id = provider.id || require('uuid').v4();
+    const id = provider.id || require('crypto').randomUUID();
     const values = [
       id,
       provider.name,
@@ -181,10 +181,10 @@ export class AnalysisRepository {
   async getUserHistory(userId: string, limit: number, offset: number) {
     const query = `
       SELECT al.*, ap.name as provider_name, ap.provider_type
-      FROM audit_logs al
-      LEFT JOIN ai_providers ap ON al.resource_id::text = ap.id::text
-      WHERE al.user_id = $1 AND al.action = 'ai_generate'
-      ORDER BY al.created_at DESC
+      FROM audit_log al
+      LEFT JOIN ai_providers ap ON al.row_id::text = ap.id::text
+      WHERE al.actor_user_id = $1 AND al.action = 'ai_generate'
+      ORDER BY al.occurred_at DESC
       LIMIT $2 OFFSET $3
     `;
     const result = await this.pool.query(query, [userId, limit, offset]);
@@ -196,7 +196,7 @@ export class AnalysisRepository {
    */
   async getHistoryCount(userId: string) {
     const result = await this.pool.query(
-      "SELECT COUNT(*) FROM audit_logs WHERE user_id = $1 AND action = 'ai_generate'",
+      "SELECT COUNT(*) FROM audit_log WHERE actor_user_id = $1 AND action = 'ai_generate'",
       [userId]
     );
     return parseInt(result.rows[0].count);
@@ -207,7 +207,7 @@ export class AnalysisRepository {
    */
   async logAudit(userId: string | null, action: string, resourceType: string, resourceId: string | null, details: any) {
     const query = `
-      INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, created_at)
+      INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values, occurred_at)
       VALUES ($1, $2, $3, $4, $5, NOW())
     `;
     const values = [userId, action, resourceType, resourceId, JSON.stringify(details)];

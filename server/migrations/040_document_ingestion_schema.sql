@@ -4,29 +4,57 @@
 BEGIN;
 
 -- documents_raw: Store original document metadata and parsed content
-CREATE TABLE IF NOT EXISTS public.documents_raw (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-  filename VARCHAR(255) NOT NULL,
-  format VARCHAR(10) NOT NULL CHECK (format IN ('pdf', 'docx', 'xlsx', 'txt')),
-  original_content BYTEA,
-  parsed_content TEXT,
-  metadata JSONB,
-  parsing_confidence NUMERIC(3,2) CHECK (parsing_confidence >= 0 AND parsing_confidence <= 1),
-  parsing_errors TEXT[],
-  raw_text_length INT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  created_by UUID REFERENCES public.users(id),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_by UUID REFERENCES public.users(id),
-  CONSTRAINT unique_document_per_project UNIQUE(project_id, filename)
-);
+-- Guarded: production (see server/migrations/000_baseline.sql) already has a
+-- public.documents_raw table serving the RAG/vector pipeline (id, title,
+-- content, metadata, created_at) -- a different, simpler shape than this
+-- document-parsing-pipeline design ever reached. Only create this version
+-- (with project_id/filename/format/etc.) on a database where documents_raw
+-- doesn't exist yet at all; never alter/reshape the existing production table.
+DO $$
+BEGIN
+  IF to_regclass('public.documents_raw') IS NULL THEN
+    CREATE TABLE public.documents_raw (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+      filename VARCHAR(255) NOT NULL,
+      format VARCHAR(10) NOT NULL CHECK (format IN ('pdf', 'docx', 'xlsx', 'txt')),
+      original_content BYTEA,
+      parsed_content TEXT,
+      metadata JSONB,
+      parsing_confidence NUMERIC(3,2) CHECK (parsing_confidence >= 0 AND parsing_confidence <= 1),
+      parsing_errors TEXT[],
+      raw_text_length INT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      created_by UUID REFERENCES public.users(id),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_by UUID REFERENCES public.users(id),
+      CONSTRAINT unique_document_per_project UNIQUE(project_id, filename)
+    );
 
--- Create indexes for common queries
-CREATE INDEX idx_documents_raw_project_id ON public.documents_raw(project_id);
-CREATE INDEX idx_documents_raw_format ON public.documents_raw(format);
-CREATE INDEX idx_documents_raw_created_by ON public.documents_raw(created_by);
-CREATE INDEX idx_documents_raw_created_at ON public.documents_raw(created_at);
+    -- Create indexes for common queries
+    CREATE INDEX idx_documents_raw_project_id ON public.documents_raw(project_id);
+    CREATE INDEX idx_documents_raw_format ON public.documents_raw(format);
+    CREATE INDEX idx_documents_raw_created_by ON public.documents_raw(created_by);
+    CREATE INDEX idx_documents_raw_created_at ON public.documents_raw(created_at);
+
+    -- Audit trigger: only valid against this migration's own shape of
+    -- documents_raw (needs updated_at), so it lives inside this guard too.
+    CREATE OR REPLACE FUNCTION update_documents_raw_timestamp()
+    RETURNS TRIGGER AS $trig$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $trig$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER documents_raw_update_timestamp
+    BEFORE UPDATE ON public.documents_raw
+    FOR EACH ROW
+    EXECUTE FUNCTION update_documents_raw_timestamp();
+
+    COMMENT ON COLUMN public.documents_raw.parsing_confidence IS 'Confidence score (0-1) of parsing accuracy';
+  END IF;
+END $$;
 
 -- document_sections: Store parsed sections for indexing and entity extraction
 CREATE TABLE IF NOT EXISTS public.document_sections (
@@ -73,19 +101,6 @@ CREATE INDEX idx_ingestion_queue_status ON public.document_ingestion_queue(statu
 CREATE INDEX idx_ingestion_queue_document_id ON public.document_ingestion_queue(document_id);
 
 -- Add audit triggers
-CREATE OR REPLACE FUNCTION update_documents_raw_timestamp()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER documents_raw_update_timestamp
-BEFORE UPDATE ON public.documents_raw
-FOR EACH ROW
-EXECUTE FUNCTION update_documents_raw_timestamp();
-
 CREATE OR REPLACE FUNCTION update_ingestion_queue_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -107,7 +122,6 @@ COMMENT ON TABLE public.documents_raw IS 'Stores raw parsed document content and
 COMMENT ON TABLE public.document_sections IS 'Stores segmented document sections for entity extraction and full-text search';
 COMMENT ON TABLE public.document_ingestion_queue IS 'Tracks document processing pipeline status';
 
-COMMENT ON COLUMN public.documents_raw.parsing_confidence IS 'Confidence score (0-1) of parsing accuracy';
 COMMENT ON COLUMN public.documents_raw.metadata IS 'JSON metadata: author, created_date, modified_date, title, version, etc.';
 
 COMMIT;

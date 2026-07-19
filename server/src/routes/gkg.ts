@@ -13,7 +13,7 @@ import { getContextForStrategy } from "../services/gkg/gkgContextService"
 import { runGkgReconciliation } from "../services/gkg/reconcile"
 import { getDatabasePool } from "../database/connection"
 import { logger } from "../utils/logger"
-import { v4 as uuidV4 } from "uuid"
+import { randomUUID as uuidV4 } from 'crypto'
 import type { GkgContextStrategy } from "../modules/documentTemplates/types"
 
 const router = express.Router()

@@ -502,8 +502,12 @@ io.on("connection", (socket) => {
 })
 
 app.use(errorHandler)
+import { initializeAgentRegistry } from './services/agents/initializeAgents';
+
 async function startServer() {
+  await initializeAgentRegistry();
   await initializeServerWithDependencyGraph(server, io, PORT)
+
 
   // Non-blocking activation of the out-of-band compliance and adjudication loops
   try {

@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS team_agreements (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE team_agreements ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_team_agreements_project_id ON team_agreements(project_id);
 CREATE INDEX IF NOT EXISTS idx_team_agreements_category ON team_agreements(category);
@@ -42,6 +45,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_team_agreements_updated_at ON team_agreements;
 CREATE TRIGGER trigger_update_team_agreements_updated_at
     BEFORE UPDATE ON team_agreements
     FOR EACH ROW

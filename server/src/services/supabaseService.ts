@@ -1,8 +1,15 @@
 import { logger } from '../utils/logger';
 
 /**
- * Supabase Service - Wrapper for Supabase MCP operations
- * Provides access to Supabase projects, edge functions, migrations, and database operations
+ * Azure Database Service - Wrapper for database operations
+ * 
+ * Originally a Supabase MCP wrapper, this service was repurposed during the
+ * Supabase → Azure Database for PostgreSQL Flexible Server migration (July 2026).
+ * 
+ * Now provides direct access to Azure PostgreSQL database statistics and entity listings.
+ * Supabase-specific MCP operations are no longer functional.
+ * 
+ * @see docs/04-deployment/SUPABASE_TO_AZURE_MIGRATION_COMPLETE.md for migration details
  */
 export class SupabaseService {
     private mcpAvailable: boolean = false;
@@ -217,9 +224,9 @@ export class SupabaseService {
                     functions: [
                         {
                             name: 'ingest-for-rag',
-                            status: 'deployed',
-                            description: 'RAG document ingestion with Voyage AI embeddings',
-                            url: 'https://blxzjbxczpmmgiwbtmdo.supabase.co/functions/v1/ingest-for-rag',
+                            status: 'migrated',
+                            description: 'RAG document ingestion with Voyage AI embeddings — moved off the Supabase Edge Function onto the Node ragService pipeline (POST /api/rag/ingest) as part of the Azure migration',
+                            url: null,
                             stats: {
                                 totalDocuments: parseInt(ragStats.rows[0]?.total_documents || '0'),
                                 totalVectors: parseInt(vectorStats.rows[0]?.total_vectors || '0'),
@@ -232,9 +239,9 @@ export class SupabaseService {
                         },
                         {
                             name: 'entity-extractor',
-                            status: 'deployed',
-                            description: 'Automatic entity extraction from documents',
-                            url: 'https://blxzjbxczpmmgiwbtmdo.supabase.co/functions/v1/entity-extractor',
+                            status: 'removed',
+                            description: 'Automatic entity extraction from documents — Supabase Edge Function and its DB triggers were removed for the Azure migration (see migration 429); the Express stand-in (POST /api/rag/extract-entities/batch) is a stub and does not yet extract entities',
+                            url: null,
                             stats: {
                                 totalEntities: parseInt(entityStats.rows[0]?.total_entities || '0'),
                                 documentsWithEntities: parseInt(entityStats.rows[0]?.documents_with_entities || '0'),
@@ -243,7 +250,7 @@ export class SupabaseService {
                         }
                     ],
                     totalFunctions: 2,
-                    deployedFunctions: 2,
+                    deployedFunctions: 0,
                     summary: {
                         totalDocuments: parseInt(ragStats.rows[0]?.total_documents || '0'),
                         totalVectors: parseInt(vectorStats.rows[0]?.total_vectors || '0'),
@@ -258,19 +265,19 @@ export class SupabaseService {
                     functions: [
                         {
                             name: 'ingest-for-rag',
-                            status: 'deployed',
-                            description: 'RAG document ingestion with Voyage AI embeddings',
-                            url: 'https://blxzjbxczpmmgiwbtmdo.supabase.co/functions/v1/ingest-for-rag'
+                            status: 'migrated',
+                            description: 'RAG document ingestion with Voyage AI embeddings — moved off the Supabase Edge Function onto the Node ragService pipeline (POST /api/rag/ingest) as part of the Azure migration',
+                            url: null
                         },
                         {
                             name: 'entity-extractor',
-                            status: 'deployed',
-                            description: 'Automatic entity extraction from documents',
-                            url: 'https://blxzjbxczpmmgiwbtmdo.supabase.co/functions/v1/entity-extractor'
+                            status: 'removed',
+                            description: 'Automatic entity extraction from documents — Supabase Edge Function and its DB triggers were removed for the Azure migration (see migration 429); the Express stand-in (POST /api/rag/extract-entities/batch) is a stub and does not yet extract entities',
+                            url: null
                         }
                     ],
                     totalFunctions: 2,
-                    deployedFunctions: 2
+                    deployedFunctions: 0
                 };
             }
         } catch (error) {

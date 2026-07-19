@@ -45,7 +45,10 @@ export class CompaniesController {
 
   create = async (req: Request, res: Response) => {
     try {
-      const company = await this.repository.create(req.body);
+      const company = await this.repository.create({
+        ...req.body,
+        created_by: (req as any).user?.id ?? null
+      });
       res.status(201).json({ message: "Company created successfully", company });
     } catch (error) {
       this.logger.error("Create company error:", error);

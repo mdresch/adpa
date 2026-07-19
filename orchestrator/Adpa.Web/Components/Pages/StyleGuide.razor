@@ -1,0 +1,76 @@
+@page "/style-guide"
+@attribute [AllowAnonymous]
+
+<PageTitle>Style Guide — Governor Portal</PageTitle>
+
+<div class="container" style="max-width: 900px;">
+    <h1 class="h3 mb-1">Governor Portal Design System</h1>
+    <p class="text-muted mb-4">ADR-011 "Humanist" — shared components, rendered with real ADR-005 field shapes. Dev/QA page, not gated behind auth.</p>
+
+    <h2 class="h5 mt-4 mb-3">Status chips</h2>
+    <div class="d-flex gap-2 mb-4">
+        <StatusChip Label="Approved" State="StatusChip.ChipState.Approved" />
+        <StatusChip Label="Pending" State="StatusChip.ChipState.Pending" />
+        <StatusChip Label="Declined" State="StatusChip.ChipState.Declined" />
+        <StatusChip Label="Neutral" State="StatusChip.ChipState.Neutral" />
+    </div>
+
+    <h2 class="h5 mt-4 mb-3">Buttons</h2>
+    <div class="d-flex gap-2 mb-4">
+        <PillButton Variant="PillButton.ButtonVariant.Primary">Primary</PillButton>
+        <PillButton Variant="PillButton.ButtonVariant.Secondary">Secondary</PillButton>
+        <PillButton Variant="PillButton.ButtonVariant.Approve">Approve override</PillButton>
+        <PillButton Variant="PillButton.ButtonVariant.Deny">Deny</PillButton>
+        <PillButton Variant="PillButton.ButtonVariant.Primary" Disabled="true">Disabled</PillButton>
+    </div>
+
+    <h2 class="h5 mt-4 mb-3">Override-review card (bloom)</h2>
+    <div class="mb-4" style="max-width: 460px;">
+        <GovernorCard ShowBloom="true">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <div style="font-size:18px; font-weight:700; letter-spacing:-.01em;">ip-governance</div>
+                    <div style="font-size:12.5px; color:var(--gp-soft);">Portfolio 4f21&hellip;c9a3 &middot; Legal</div>
+                </div>
+                <StatusChip Label="Pending review" State="StatusChip.ChipState.Pending" />
+            </div>
+
+            <JustificationBlock>
+                "Compliance owner is on leave through Friday; this filing deadline is Wednesday. Requesting activation ahead of normal sign-off."
+            </JustificationBlock>
+
+            <div class="d-flex gap-3 mb-3" style="font-size:12.5px; color:var(--gp-soft);">
+                <div>Requested by <b style="color:var(--gp-ink);">M. Alavi</b></div>
+                <div>Target <b style="color:var(--gp-ink);">active</b></div>
+            </div>
+
+            <div class="d-flex gap-2 mb-3">
+                <PillButton Variant="PillButton.ButtonVariant.Approve">Approve override</PillButton>
+                <PillButton Variant="PillButton.ButtonVariant.Deny">Deny</PillButton>
+            </div>
+
+            <ReviewerStrip Reviewers="@_breakGlassReviewers" />
+        </GovernorCard>
+    </div>
+
+    <h2 class="h5 mt-4 mb-3">Dense card (no bloom)</h2>
+    <div class="mb-5" style="max-width: 460px;">
+        <GovernorCard ShowBloom="false">
+            <div class="d-flex justify-content-between align-items-center">
+                <div style="font-size:14px; font-weight:600;">override_requests &middot; #a91f</div>
+                <StatusChip Label="Approved" State="StatusChip.ChipState.Approved" />
+            </div>
+        </GovernorCard>
+    </div>
+</div>
+
+@code {
+    private readonly List<ReviewerStrip.ReviewerStatus> _breakGlassReviewers = new()
+    {
+        new("Account owner", StatusChip.ChipState.Approved),
+        new("Manager", StatusChip.ChipState.Pending),
+        new("Internal audit", StatusChip.ChipState.Pending),
+        new("External auditor", StatusChip.ChipState.Approved),
+        new("Super admin", StatusChip.ChipState.Declined)
+    };
+}

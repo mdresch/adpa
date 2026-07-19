@@ -56,6 +56,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_stakeholders_updated_at ON stakeholders;
 CREATE TRIGGER trigger_update_stakeholders_updated_at
     BEFORE UPDATE ON stakeholders
     FOR EACH ROW

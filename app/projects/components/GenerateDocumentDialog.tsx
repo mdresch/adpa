@@ -7,7 +7,6 @@ import React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -297,22 +296,6 @@ export function GenerateDocumentDialog({
               </div>
             </div>
 
-            {/* Generation Prompt */}
-            <div>
-              <Label htmlFor="generation-prompt" className="text-sm font-semibold">
-                Generation Prompt *
-              </Label>
-              <Textarea
-                id="generation-prompt"
-                placeholder="Describe what you want the document to contain..."
-                value={form.prompt}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onFormChange({ ...form, prompt: e.target.value })}
-                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
-                rows={4}
-                required
-              />
-            </div>
-            
             {/* Progress Indicator */}
             {generating && progress.step > 0 && (
               <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">

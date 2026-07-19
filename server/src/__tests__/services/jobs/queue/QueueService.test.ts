@@ -23,7 +23,7 @@ import {
   JobDatabaseError,
   StuckJobsError,
 } from '../../../../services/jobs/errors'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 // Mock PerformanceMonitor
 jest.mock('../../../../utils/performanceMonitor', () => {
@@ -480,8 +480,8 @@ describe('QueueService', () => {
       await queueService.cancelJob(jobId)
 
       expect(mockDependencies.database!.query).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE jobs SET status = 'cancelled'"),
-        [jobId]
+        expect.stringContaining("status = 'cancelled'"),
+        [jobId, null]
       )
       expect(mockQueue.getJob).toHaveBeenCalledWith(jobId)
       expect(mockJob.remove).toHaveBeenCalled()

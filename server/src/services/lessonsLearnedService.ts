@@ -15,7 +15,7 @@ import { driftDetectionService } from './driftDetectionService'
 import { aiRecommendationsService } from './aiRecommendationsService'
 import { aiService } from './aiService'
 import type { PoolClient } from 'pg'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import { ProjectContextAnalyzer } from '../modules/contextGathering/analyzers/projectContextAnalyzer'
 
 // Initialize cache service

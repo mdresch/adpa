@@ -6,7 +6,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { entityExtractionService, ExtractedEntity } from './entityExtractionService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 
 export type BaselineType = 'project' | 'phase' | 'milestone' | 'version' | 'custom'
 
@@ -125,7 +125,7 @@ export class BaselineService {
       }
 
       // Insert baseline
-      const baselineId = uuidv4()
+      const baselineId = randomUUID()
       const result = await pool.query(
         `INSERT INTO project_entity_baselines (
           id, project_id, baseline_name, baseline_type, baseline_version,
@@ -213,7 +213,7 @@ export class BaselineService {
       const driftDetected = driftSeverity !== 'none'
 
       // Store comparison result
-      const comparisonId = uuidv4()
+      const comparisonId = randomUUID()
       await pool.query(
         `INSERT INTO baseline_comparisons (
           id, baseline_id, comparison_type, comparison_result, summary,

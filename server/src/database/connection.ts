@@ -22,7 +22,7 @@ export class DatabaseCircuitOpenError extends Error {
 const getDatabaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL
 
 // timeouts and retry defaults can be configured via environment variables
-const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '60000', 10)
+const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '15000', 10)
 const DEFAULT_DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000', 10)
 const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(
   process.env.DB_MAX_RETRIES_PER_METHOD ||
@@ -144,11 +144,12 @@ export function isTransactionPoolerUrl(databaseUrl: string): boolean {
     const dbUrl = new URL(databaseUrl)
     return (
       dbUrl.port === "6543" ||
+      dbUrl.port === "6432" ||
       dbUrl.searchParams.has("pgbouncer") ||
       dbUrl.hostname.includes("pooler.supabase.com")
     )
   } catch {
-    return databaseUrl.includes(":6543") || databaseUrl.includes("pooler.supabase.com")
+    return databaseUrl.includes(":6543") || databaseUrl.includes(":6432") || databaseUrl.includes("pooler.supabase.com")
   }
 }
 

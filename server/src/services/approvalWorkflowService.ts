@@ -10,7 +10,7 @@
 import { pool, getDatabasePool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { emailNotificationService } from './emailNotificationService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import { PoolClient } from 'pg'
 import { baselineUpdateService } from './baselineUpdateService'
 

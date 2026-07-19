@@ -6,7 +6,7 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 async function applyMigration() {
     const client = new Client({
         connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false } // Required for Supabase
+        ssl: { rejectUnauthorized: false } // Required for cloud databases (Azure, Supabase)
     });
 
     try {

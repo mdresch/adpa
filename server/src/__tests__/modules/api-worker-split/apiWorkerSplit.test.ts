@@ -98,6 +98,94 @@ describe("API / Worker Process Split - Feature Contracts", () => {
     });
   });
 
+  // REQ-004 (extended): closes the resident browser after an idle period, since
+  // per this feature's own spec the resident Chromium instance was the actual OOM
+  // risk on resource-constrained hosts -- launching lazily but never closing it
+  // between uses only half-satisfies the requirement. These tests guard the
+  // idle-timeout mechanism added to close that gap.
+  describe("REQ-004 (extended): idle-based browser auto-close", () => {
+    beforeEach(async () => {
+      // Singleton state persists across tests in this file -- start each test
+      // from a known-clean slate rather than assuming prior tests' state.
+      await pdfService.cleanup();
+      jest.clearAllMocks();
+      jest.useFakeTimers();
+    });
+
+    afterEach(async () => {
+      jest.useRealTimers();
+      await pdfService.cleanup();
+    });
+
+    it("does not close the browser before the idle timeout elapses", async () => {
+      const puppeteer = require("puppeteer");
+      await pdfService.getBrowser();
+      const launchedBrowser = await puppeteer.launch.mock.results[0].value;
+
+      jest.advanceTimersByTime(4 * 60 * 1000); // 4 of 5 configured minutes
+
+      expect(launchedBrowser.close).not.toHaveBeenCalled();
+    });
+
+    it("closes the browser automatically once nothing has used it for the full idle window", async () => {
+      const puppeteer = require("puppeteer");
+      await pdfService.getBrowser();
+      const launchedBrowser = await puppeteer.launch.mock.results[0].value;
+
+      jest.advanceTimersByTime(5 * 60 * 1000 + 1);
+      await Promise.resolve(); // flush the cleanup() microtask the timer callback kicks off
+
+      expect(launchedBrowser.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("reschedules the idle timer on reuse instead of closing at the original deadline", async () => {
+      const puppeteer = require("puppeteer");
+      await pdfService.getBrowser();
+      const launchedBrowser = await puppeteer.launch.mock.results[0].value;
+
+      // Touch the browser again just before the original deadline would fire.
+      jest.advanceTimersByTime(4 * 60 * 1000);
+      await pdfService.getBrowser();
+      jest.advanceTimersByTime(4 * 60 * 1000); // 8 minutes total, but only 4 since last use
+
+      expect(launchedBrowser.close).not.toHaveBeenCalled();
+
+      // Now let a full idle window elapse with no further use.
+      jest.advanceTimersByTime(60 * 1000 + 1);
+      await Promise.resolve();
+
+      expect(launchedBrowser.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("explicit cleanup() clears the pending idle timer so it does not fire again later", async () => {
+      const puppeteer = require("puppeteer");
+      await pdfService.getBrowser();
+      const launchedBrowser = await puppeteer.launch.mock.results[0].value;
+
+      await pdfService.cleanup();
+      expect(launchedBrowser.close).toHaveBeenCalledTimes(1);
+
+      // Advancing time past where the original idle timer would have fired must
+      // not trigger a second close call -- cleanup() should have cleared it.
+      jest.advanceTimersByTime(6 * 60 * 1000);
+      await Promise.resolve();
+
+      expect(launchedBrowser.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("launches a fresh browser on the next request after an idle close", async () => {
+      const puppeteer = require("puppeteer");
+      await pdfService.getBrowser();
+      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(5 * 60 * 1000 + 1);
+      await Promise.resolve();
+
+      await pdfService.getBrowser();
+      expect(puppeteer.launch).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("REQ-005 & REQ-006: Telemetry and LLM Insights Gating", () => {
     it("should gate writing LLM prompt and response blobs to Postgres jobs table based on LLM_INSIGHTS_STORE_BLOBS", async () => {
       process.env.LLM_INSIGHTS_STORE_BLOBS = "false";

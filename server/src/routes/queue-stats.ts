@@ -7,15 +7,6 @@
 import express from "express"
 import { authenticateToken } from "../middleware/auth"
 import { pool } from "../database/connection"
-import {
-  aiQueue,
-  documentQueue,
-  pipelineQueue,
-  processFlowQueue,
-  baselineQueue,
-  regenerationQueue,
-  extractionQueue
-} from "../services/queueService"
 import { logger, childLogger } from "../utils/logger"
 import { getRedisCircuitState } from "../utils/redis"
 import { getDbCircuitState } from "../database/connection"
@@ -31,20 +22,41 @@ router.get("/overview", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
 
   try {
-    const queues = [
-      { name: "ai-processing", queue: aiQueue },
-      { name: "document-processing", queue: documentQueue },
-      { name: "pipeline-processing", queue: pipelineQueue },
-      { name: "process-flow-processing", queue: processFlowQueue },
-      { name: "baseline-processing", queue: baselineQueue },
-      { name: "document-regeneration", queue: regenerationQueue },
-      { name: "project-data-extraction", queue: extractionQueue }
+    const queueNames = [
+      "ai-processing",
+      "document-processing",
+      "pipeline-processing",
+      "process-flow-processing",
+      "baseline-processing",
+      "document-regeneration",
+      "project-data-extraction"
     ]
 
     const queueStats = await Promise.all(
-      queues.map(async ({ name, queue }) => {
+      queueNames.map(async (name) => {
         try {
-          const { active, waiting, completed, failed, delayed } = await queue.getStats()
+          // Job state is sourced from the `jobs` table rather than live broker queue
+          // depth: RabbitMQ has no random-access removal, so cancelling a job only
+          // updates its DB row — the message can remain queued until a worker consumes
+          // and discards it. Counting broker depth as "waiting" over-reports jobs that
+          // are already resolved (cancelled/failed/completed) but not yet drained.
+          const statusCountsResult = await pool.query(
+            `SELECT
+               COUNT(*) FILTER (WHERE status = 'pending') as waiting,
+               COUNT(*) FILTER (WHERE status = 'processing' AND error_message IS NULL) as active,
+               COUNT(*) FILTER (WHERE status = 'completed') as completed,
+               COUNT(*) FILTER (WHERE status = 'failed' OR (status = 'processing' AND error_message IS NOT NULL)) as failed
+             FROM jobs
+             WHERE queue_name = $1
+               AND created_at > NOW() - INTERVAL '7 days'`,
+            [name]
+          )
+          const statusCounts = statusCountsResult.rows[0]
+          const waiting = parseInt(statusCounts.waiting) || 0
+          const active = parseInt(statusCounts.active) || 0
+          const completed = parseInt(statusCounts.completed) || 0
+          const failed = parseInt(statusCounts.failed) || 0
+          const delayed = 0
 
           // Get active workers for this queue from database
           // Exclude jobs with error_message (they're actually failed, not processing)

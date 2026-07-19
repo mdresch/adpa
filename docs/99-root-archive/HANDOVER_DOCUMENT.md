@@ -31,7 +31,7 @@ ADPA (Advanced Document Processing & Automation) is a **production-ready, enterp
 |-------|-----------|--------|
 | **Frontend** | Next.js 14.2.30 (Pages Router) | ✅ Running |
 | **Backend** | Express.js 5.1.0 + TypeScript | ✅ Running |
-| **Database** | Supabase PostgreSQL (Serverless) | ✅ Connected |
+| **Database** | Azure Database for PostgreSQL Flexible Server | ✅ Connected |
 | **Cache** | Railway Redis | ✅ Connected |
 | **AI Providers** | OpenAI, DeepSeek, Moonshot, Google Gemini, Mistral | ✅ Working |
 | **Real-time** | Socket.io + Supabase Realtime | ✅ Active |

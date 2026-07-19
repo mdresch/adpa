@@ -79,24 +79,11 @@ CREATE INDEX IF NOT EXISTS idx_infrared_thermal_conductance_wavelength ON infrar
 CREATE INDEX IF NOT EXISTS idx_infrared_thermal_conductance_timestamp ON infrared_thermal_conductance_log(timestamp);
 
 -- Create triggers for updated_at timestamps
+DROP TRIGGER IF EXISTS update_qubit_states_updated_at ON qubit_states;
 CREATE TRIGGER update_qubit_states_updated_at BEFORE UPDATE ON qubit_states FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert sample qubit states for demonstration
-INSERT INTO qubit_states (qubit_id, state, coherence, temperature, noise_level, stability, infrared_spectrum)
-VALUES 
-    ('qubit-001', 'superposition', 95.5, 0.010, 5.2, 98.1, 775.0),
-    ('qubit-002', 'entangled', 92.3, 0.015, 8.1, 95.4, 780.0),
-    ('qubit-003', '|+⟩', 88.7, 0.020, 12.3, 90.2, 765.0),
-    ('qubit-004', '|0⟩', 97.1, 0.008, 3.5, 99.1, 770.0),
-    ('qubit-005', '|-⟩', 91.8, 0.018, 9.7, 93.6, 785.0)
-ON CONFLICT (qubit_id) DO NOTHING;
-
--- Insert initial stability metrics
-INSERT INTO quantum_stability_metrics (
-    total_qubits, stable_qubits, decoherence_rate, average_coherence, 
-    thermal_stability, noise_reduction, efficiency, infrared_optimization
-)
-VALUES (5, 4, 20.0, 93.08, 95.4, 91.4, 80.0, 96.2);
+-- Sample-data seeds intentionally removed: real data comes from the
+-- Supabase-to-Azure data copy, not from demo rows baked into this migration.
 
 -- Create view for real-time quantum stability dashboard
 CREATE OR REPLACE VIEW quantum_stability_dashboard AS

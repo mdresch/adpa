@@ -145,28 +145,25 @@ export class RagService {
                 // Delete old
                 await client.query('DELETE FROM document_chunks WHERE document_id = $1', [documentId])
 
-                // Insert new
-                if (allVectors.length > 0) {
-                    const query = `
-                        INSERT INTO document_chunks (
+                // Insert new (batched multi-row inserts instead of one round-trip per chunk)
+                const INSERT_BATCH_SIZE = 50
+                for (let i = 0; i < allVectors.length; i += INSERT_BATCH_SIZE) {
+                    const batch = allVectors.slice(i, i + INSERT_BATCH_SIZE)
+                    const values: any[] = []
+                    const placeholders = batch.map((v, idx) => {
+                        const base = idx * 8
+                        values.push(v.document_id, v.content, v.embedding, v.chunk_index, v.metadata, v.project_id, v.template_id, v.title)
+                        return `($${base + 1}, $${base + 2}, $${base + 3}::vector, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`
+                    }).join(', ')
+
+                    await client.query(
+                        `INSERT INTO document_chunks (
                           document_id, content, embedding, chunk_index, metadata,
                           project_id, template_id, title
                         )
-                        VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8)
-                    `
-
-                    for (const v of allVectors) {
-                        await client.query(query, [
-                            v.document_id,
-                            v.content,
-                            v.embedding,
-                            v.chunk_index,
-                            v.metadata,
-                            v.project_id,
-                            v.template_id,
-                            v.title,
-                        ])
-                    }
+                        VALUES ${placeholders}`,
+                        values
+                    )
                 }
 
                 // Update document status

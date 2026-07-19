@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID as uuidv4 } from 'crypto'
 import { AuthRepository } from './AuthRepository';
 import { childLogger } from "../../utils/logger";
 import { trackActivity } from "../../middleware/analyticsMiddleware";
 import { pool } from "../../database/connection";
+import { UserDepartmentRepository } from "../departments/UserDepartmentRepository";
+import { resolveCurrentUserDepartments } from "../departments/currentUserProfile";
 
 /**
  * AuthController (Modular)
@@ -100,6 +102,12 @@ export class AuthController {
     return this._repository;
   }
 
+  private static _userDepartmentRepository: UserDepartmentRepository;
+  private static get userDepartmentRepository() {
+    if (!this._userDepartmentRepository) this._userDepartmentRepository = new UserDepartmentRepository(pool);
+    return this._userDepartmentRepository;
+  }
+
   /**
    * POST /api/v1/auth/register
    * Registers a new user and optionally a company.
@@ -126,14 +134,20 @@ export class AuthController {
 
         // Handle company creation/assignment
         let companyId: string | null = null;
+        let isNewCompany = false;
         if (companyName && companyName.trim()) {
           const existingCompany = await AuthController.repository.findCompanyByName(companyName.trim(), client);
 
           if (existingCompany.rows.length > 0) {
             companyId = existingCompany.rows[0].id;
           } else {
+            isNewCompany = true;
             companyId = uuidv4();
             const emailDomain = email.split('@')[1] || null;
+            // created_by is set below, after the new user row exists: companies.created_by
+            // references users(id) while users.company_id references companies(id) — a
+            // circular FK neither insert order alone can satisfy, so this starts NULL and
+            // is back-filled via setCompanyCreatedBy once the user row is committed.
             await AuthController.repository.createCompany({
               id: companyId,
               name: companyName.trim(),
@@ -158,8 +172,11 @@ export class AuthController {
 
         const metadata = companyName ? { company_name: companyName.trim() } : null;
 
-        // Create user
+        // Create user. Pre-generate the id only when this registration is also creating a
+        // new company, so it can become that company's created_by (Company Admin) below.
+        const newUserId = isNewCompany ? uuidv4() : undefined;
         const createUserResult = await AuthController.repository.createUser({
+          id: newUserId,
           email,
           password_hash: passwordHash,
           name,
@@ -171,6 +188,10 @@ export class AuthController {
 
         if (!createUserResult.rows || createUserResult.rows.length === 0) {
           throw new Error("User creation failed");
+        }
+
+        if (isNewCompany && companyId && newUserId) {
+          await AuthController.repository.setCompanyCreatedBy(companyId, newUserId, client);
         }
 
         return createUserResult;
@@ -281,7 +302,7 @@ export class AuthController {
       }
 
       const user = result.rows[0];
-      
+
       // SAFE PERMISSION PARSING: Ensure permissions is an object
       if (typeof user.permissions === 'string') {
         try {
@@ -292,7 +313,11 @@ export class AuthController {
         }
       }
 
-      res.json({ success: true, user });
+      const departments = await resolveCurrentUserDepartments(userId, {
+        listActiveDepartmentsByUser: (id) => AuthController.userDepartmentRepository.listByUser(id)
+      });
+
+      res.json({ success: true, user, departments });
     } catch (error: any) {
       if (error?.code === "DB_CIRCUIT_OPEN") {
         return res.status(503).json({ error: "Service temporarily unavailable" });
@@ -301,7 +326,7 @@ export class AuthController {
         message: error.message,
         stack: error.stack
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Internal server error",
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });

@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS capacity_plans (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE capacity_plans ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_capacity_plans_project_id ON capacity_plans(project_id);
 CREATE INDEX IF NOT EXISTS idx_capacity_plans_team_member ON capacity_plans(team_member);
@@ -38,6 +41,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_capacity_plans_updated_at ON capacity_plans;
 CREATE TRIGGER trigger_update_capacity_plans_updated_at
     BEFORE UPDATE ON capacity_plans
     FOR EACH ROW

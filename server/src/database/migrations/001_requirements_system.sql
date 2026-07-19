@@ -28,28 +28,9 @@ CREATE INDEX IF NOT EXISTS idx_requirements_priority ON requirements(priority);
 CREATE INDEX IF NOT EXISTS idx_requirements_status ON requirements(status);
 
 -- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_requirements_updated_at ON requirements;
 CREATE TRIGGER update_requirements_updated_at BEFORE UPDATE ON requirements FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert some sample requirements for testing
-INSERT INTO requirements (title, description, document_id, project_id, requirement_type, priority, status)
-SELECT 
-    'Sample Requirement ' || generate_series(1, 5),
-    'This is a sample requirement for testing the ECS system. It includes various types of requirements that would be found in a typical project.',
-    d.id,
-    d.project_id,
-    CASE (random() * 3)::int
-        WHEN 0 THEN 'functional'
-        WHEN 1 THEN 'non-functional'
-        ELSE 'technical'
-    END,
-    (random() * 10 + 1)::int,
-    CASE (random() * 5)::int
-        WHEN 0 THEN 'draft'
-        WHEN 1 THEN 'review'
-        WHEN 2 THEN 'approved'
-        WHEN 3 THEN 'implemented'
-        ELSE 'tested'
-    END
-FROM documents d
-LIMIT 5
-ON CONFLICT DO NOTHING;
+-- Sample-data seed intentionally removed: real requirements data comes from
+-- the Supabase-to-Azure data copy, and production's requirements table has
+-- since evolved a NOT NULL "name" column this old seed never populated.

@@ -517,7 +517,7 @@ export class DracoService {
         reason_length: reason.length,
       })
 
-      // 3. Security log for audit trail (audit_logs table if exists, otherwise standard logger)
+      // 3. Security log for audit trail (audit_log table, hash-chained; otherwise standard logger)
       // We log at INFO level so it's captured in cloud logs for governance reviews.
       logger.warn(`[SECURITY-AUDIT] DRACO Override by ${userId} for Document ${documentId}. Reason: ${reason}`)
 

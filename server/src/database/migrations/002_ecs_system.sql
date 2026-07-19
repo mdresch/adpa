@@ -59,17 +59,13 @@ CREATE TABLE IF NOT EXISTS okrs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Requirements Traceability Table
-CREATE TABLE IF NOT EXISTS requirements_traceability (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    requirement_id UUID NOT NULL REFERENCES requirements(id) ON DELETE CASCADE,
-    traceability_score DECIMAL(5,2) DEFAULT 0.0 CHECK (traceability_score >= 0.0 AND traceability_score <= 100.0),
-    optical_spectrum INTEGER[] DEFAULT '{380, 450, 500, 550, 600, 650, 700, 750, 800, 850}',
-    traceability_path JSONB DEFAULT '[]',
-    dependencies JSONB DEFAULT '[]',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- NOTE: this migration originally also created a "requirements_traceability"
+-- table here (requirement_id UUID FK, traceability_score/path/dependencies
+-- columns). Production's actual requirements_traceability table (see
+-- server/migrations/000_baseline.sql) is a different, incompatible design --
+-- a traceability matrix keyed by varchar requirement/deliverable/test-case
+-- codes, not a UUID FK to requirements(id). That table already exists and is
+-- in active use, so this version is intentionally not created here.
 
 -- Document Context Cache Table
 CREATE TABLE IF NOT EXISTS document_context_cache (
@@ -130,9 +126,6 @@ CREATE INDEX IF NOT EXISTS idx_okrs_project ON okrs(project_id);
 CREATE INDEX IF NOT EXISTS idx_okrs_requirement ON okrs(requirement_id);
 CREATE INDEX IF NOT EXISTS idx_okrs_completion_date ON okrs(target_completion_date);
 
-CREATE INDEX IF NOT EXISTS idx_requirements_traceability_requirement ON requirements_traceability(requirement_id);
-CREATE INDEX IF NOT EXISTS idx_requirements_traceability_score ON requirements_traceability(traceability_score);
-
 CREATE INDEX IF NOT EXISTS idx_document_context_cache_document ON document_context_cache(document_id);
 CREATE INDEX IF NOT EXISTS idx_document_context_cache_project ON document_context_cache(project_id);
 CREATE INDEX IF NOT EXISTS idx_document_context_cache_importance ON document_context_cache(importance_score);
@@ -154,12 +147,17 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_project_dependencies_updated_at ON project_dependencies;
 CREATE TRIGGER update_project_dependencies_updated_at BEFORE UPDATE ON project_dependencies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_critical_success_factors_updated_at ON critical_success_factors;
 CREATE TRIGGER update_critical_success_factors_updated_at BEFORE UPDATE ON critical_success_factors FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_kpis_updated_at ON kpis;
 CREATE TRIGGER update_kpis_updated_at BEFORE UPDATE ON kpis FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_okrs_updated_at ON okrs;
 CREATE TRIGGER update_okrs_updated_at BEFORE UPDATE ON okrs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_requirements_traceability_updated_at BEFORE UPDATE ON requirements_traceability FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_document_context_cache_updated_at ON document_context_cache;
 CREATE TRIGGER update_document_context_cache_updated_at BEFORE UPDATE ON document_context_cache FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_ai_provider_context_optimization_updated_at ON ai_provider_context_optimization;
 CREATE TRIGGER update_ai_provider_context_optimization_updated_at BEFORE UPDATE ON ai_provider_context_optimization FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert default optical spectrum configurations

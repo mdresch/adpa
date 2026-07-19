@@ -1,0 +1,23 @@
+@* ADR-012 PR8: one canonical provenance-marker format across every page that renders it
+   (Approvals.razor, MyRequests.razor) -- ADR-012 itself deliberately left the exact display
+   open ("hash-chain position or recorded timestamp"), but two pages independently choosing
+   among that ambiguity would produce two different UIs for the same concept. Never renders
+   the digest/hash itself -- that's an integrity proof for reconciliation tooling, not
+   something a reviewer reads directly. Renders nothing when ChainEntryId is null (a row
+   somehow missing its chain entry shouldn't show a false/placeholder marker). *@
+@if (!string.IsNullOrEmpty(ChainEntryId) && ChainRecordedAt is not null)
+{
+    <div style="font-size:11.5px; color:var(--gp-soft); margin-top:4px;">
+        Chain Entry: @ChainEntryId
+        <br />
+        Recorded: @ChainRecordedAt.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string? ChainEntryId { get; set; }
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset? ChainRecordedAt { get; set; }
+}

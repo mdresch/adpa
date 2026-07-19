@@ -1,6 +1,6 @@
 import express from "express"
 import Joi from "joi"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
@@ -13,6 +13,13 @@ import { storageArchivalService } from "../services/storageArchivalService"
 import { findExistingTemplateDocument, getAIProviderQuotaDetails } from "../utils/documentGenerationRouteGuards"
 
 const router = express.Router()
+
+// DRACO Board escalation: only run the 3-judge AI review board when the Tier-1
+// policy audit didn't already clear the document, instead of on every
+// draco_enabled generation regardless of outcome. Matches the existing
+// PENDING_HUMAN_APPROVAL cutoff in documentGenerationService.ts so "needs human
+// review" and "needs DRACO review" stay in sync by default.
+const DRACO_ESCALATION_SCORE_THRESHOLD = Number(process.env.DRACO_ESCALATION_SCORE_THRESHOLD || 90)
 
 // Validation schema for template conflict check
 const checkTemplateSchema = Joi.object({
@@ -718,6 +725,18 @@ router.post("/generate",
                 return
               }
 
+              // Escalate to the 3-judge Review Board only when the Tier-1 policy
+              // audit didn't already clear the document.
+              const auditScore = typeof result.compliance_score === 'number' ? result.compliance_score : null
+              if (auditScore !== null && auditScore >= DRACO_ESCALATION_SCORE_THRESHOLD) {
+                log.info('🎯 [DRACO] Skipping DRACO review — audit score cleared the escalation threshold', {
+                  templateId,
+                  auditScore,
+                  threshold: DRACO_ESCALATION_SCORE_THRESHOLD,
+                })
+                return
+              }
+
               log.info('🎯 [DRACO] Triggering DRACO AI Review Board for generated document', {
                 documentId,
                 documentName: name,
@@ -1240,7 +1259,7 @@ router.post("/generate-new-version",
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
 
         // Enqueue quality audit job (async, non-blocking)
-        const auditJobId = require('uuid').v4()
+        const auditJobId = require('crypto').randomUUID()
         getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId: existingDocumentId,
@@ -1284,8 +1303,8 @@ router.post("/generate-new-version",
 
       // Log activity
       await pool.query(
-        `INSERT INTO audit_logs 
-         (id, user_id, action, resource_type, resource_id, new_values)
+        `INSERT INTO audit_log
+         (id, actor_user_id, action, table_name, row_id, new_values)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           uuidv4(),

@@ -7,7 +7,7 @@
 
 import { connectDatabase, getDatabasePool } from '../../database/connection';
 import { logger } from '../../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto'
 import crypto from 'crypto';
 import { io } from '@/socket';
 import { ConflictDetectionService } from './ConflictDetectionService';

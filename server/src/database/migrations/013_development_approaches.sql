@@ -46,6 +46,24 @@ CREATE TABLE IF NOT EXISTS development_approaches (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS methodology VARCHAR(50) CHECK (methodology IN ('waterfall', 'scrum', 'kanban', 'lean', 'safe', 'prince2', 'custom'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS justification TEXT;
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS uncertainty_level VARCHAR(20) CHECK (uncertainty_level IN ('low', 'medium', 'high'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS requirements_stability VARCHAR(20) CHECK (requirements_stability IN ('stable', 'evolving', 'uncertain'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS stakeholder_engagement_model TEXT;
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS delivery_cadence VARCHAR(50) CHECK (delivery_cadence IN ('single', 'iterative', 'incremental', 'continuous'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS organizational_maturity VARCHAR(20) CHECK (organizational_maturity IN ('low', 'medium', 'high'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS team_experience_level VARCHAR(20) CHECK (team_experience_level IN ('junior', 'mixed', 'senior'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS regulatory_constraints BOOLEAN DEFAULT FALSE;
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS life_cycle_phases TEXT[];
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS iteration_length INTEGER;
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS iteration_unit VARCHAR(20) CHECK (iteration_unit IN ('days', 'weeks'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS governance_approach VARCHAR(50) CHECK (governance_approach IN ('lightweight', 'standard', 'formal'));
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS review_gates TEXT[];
+ALTER TABLE development_approaches ADD COLUMN IF NOT EXISTS tailoring_decisions_text TEXT;
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_development_approaches_project_id ON development_approaches(project_id);
 CREATE INDEX IF NOT EXISTS idx_development_approaches_approach ON development_approaches(approach);
@@ -61,6 +79,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_development_approaches_updated_at ON development_approaches;
 CREATE TRIGGER trigger_update_development_approaches_updated_at
     BEFORE UPDATE ON development_approaches
     FOR EACH ROW

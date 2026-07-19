@@ -5,9 +5,10 @@ import { documentTemplateService } from "../modules/documentTemplates/service"
 import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
 import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPrompt"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import { updateJobStatus, updateJobLlmProgress, type LlmProgressStep } from "./queueService"
 import { CompactorService } from "./compactorService"
+import { templateAuditService } from "./templateAuditService"
 import { contextRetrieval } from "./searchService"
 
 export interface DocumentGenerationRequest {
@@ -133,7 +134,9 @@ class DocumentGenerationService {
       return 1
     }
 
-    return 3
+    // Each concurrent section draft holds a full GKG/RAG context in memory for the
+    // job's duration; keep this low by default on memory-constrained deployments.
+    return 2
   }
 
   /**
@@ -168,6 +171,21 @@ class DocumentGenerationService {
       }
     }
     throw lastError
+  }
+
+  /**
+   * Enforces a hard wall-clock ceiling on a single LLM call so a hung provider request
+   * can't stall the whole generation job indefinitely. Default 90s, overridable via
+   * DOC_GEN_LLM_CALL_TIMEOUT_MS.
+   */
+  private async withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+    const timeoutMs = Number(process.env.DOC_GEN_LLM_CALL_TIMEOUT_MS) || 90000
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs)
+      ),
+    ])
   }
 
   /**
@@ -335,8 +353,14 @@ class DocumentGenerationService {
   private async ensureSourceDocumentsIngested(documentIds: string[]): Promise<void> {
     if (!documentIds.length || !process.env.VOYAGE_API_KEY) return
 
+    const staleIds = await this.filterAlreadySyncedDocumentIds(documentIds)
+    if (staleIds.length === 0) {
+      logger.info(`[DOC-GEN] Skipping RAG ingest — all ${documentIds.length} source document(s) already synced`)
+      return
+    }
+
     const { ragService } = await Promise.resolve().then(() => require('./ragService'))
-    for (const documentId of documentIds) {
+    await this.mapWithConcurrency(staleIds, 3, async (documentId) => {
       try {
         const result = await ragService.ingestDocument(documentId)
         logger.info(`[DOC-GEN] RAG ingest for source document ${documentId}: ${result.chunks} chunks`)
@@ -345,7 +369,28 @@ class DocumentGenerationService {
           error: err instanceof Error ? err.message : String(err),
         })
       }
+    })
+  }
+
+  /** Drop documents that are already RAG-synced and haven't changed since their last ingest. */
+  private async filterAlreadySyncedDocumentIds(documentIds: string[]): Promise<string[]> {
+    const rows = await pool.query(
+      `SELECT id, sync_status, processing_time, updated_at
+       FROM documents
+       WHERE id = ANY($1::uuid[])`,
+      [documentIds]
+    )
+
+    const staleIds: string[] = []
+    for (const row of rows.rows as Array<{ id: string; sync_status: string | null; processing_time: string | null; updated_at: string | Date }>) {
+      const lastSyncedAt = row.processing_time ? new Date(row.processing_time) : null
+      const updatedAt = new Date(row.updated_at)
+      const isUpToDate = row.sync_status === 'synced' && lastSyncedAt && !Number.isNaN(lastSyncedAt.getTime()) && lastSyncedAt >= updatedAt
+      if (!isUpToDate) {
+        staleIds.push(row.id)
+      }
     }
+    return staleIds
   }
 
   private async mapWithConcurrency<T, R>(
@@ -400,7 +445,7 @@ class DocumentGenerationService {
 
   async generateDocument(request: DocumentGenerationRequest) {
     let isDocumentCreated = false;
-    const docId = request.documentId || uuidv4();
+    let docId = request.documentId || uuidv4();
     try {
       logger.info(`Starting agentic document generation for project ${request.projectId}`)
       
@@ -438,22 +483,62 @@ class DocumentGenerationService {
 
       // 2.3. Pre-insert a minimal/draft document row to satisfy foreign key constraints for entity extraction during parallel drafting
       const docName = request.name || (template?.name ? `Generated: ${template.name}` : 'Generated Document')
-      await pool.query(
-        `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          docId,
-          request.projectId,
-          docName,
-          '',
-          request.templateId || null,
-          'draft',
-          request.userId || null,
-          1,
-          '1.0.0'
-        ]
-      )
+
+      // Reuse an existing empty draft instead of minting a new one, unless docId already
+      // corresponds to a real row. NOTE: checking `!request.documentId` here is NOT enough —
+      // the caller (AIGenerationJobService.generateContent) always passes *some* documentId,
+      // whether it's a genuinely-reused one or a freshly minted uuid generated because its own
+      // reuse attempt found nothing (e.g. a prior crash meant the id was never persisted back
+      // onto the job row). So `request.documentId` is checked here for existence of an actual
+      // row, not mere presence of the field, before falling back to a fresh row.
+      const candidateRow = await pool.query(`SELECT 1 FROM documents WHERE id = $1`, [docId])
+      if (candidateRow.rows.length === 0) {
+        // Atomic insert-or-reuse against idx_documents_one_empty_draft_per_template
+        // (migration 431): at most one empty draft may exist per (project_id,
+        // template_id) — enforced by Postgres itself, not by this application-level
+        // check. This closes the race where concurrent or broker-redelivered
+        // attempts of the same generation each ran a SELECT-then-INSERT, each saw
+        // "no existing draft" before the other's insert had committed, and each
+        // minted its own duplicate placeholder document.
+        const insertResult = await pool.query(
+          `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (project_id, template_id) WHERE status = 'draft' AND (content IS NULL OR content = '')
+           DO NOTHING
+           RETURNING id`,
+          [
+            docId,
+            request.projectId,
+            docName,
+            '',
+            request.templateId || null,
+            'draft',
+            request.userId || null,
+            1,
+            '1.0.0'
+          ]
+        )
+
+        if (insertResult.rows.length === 0) {
+          // Conflict: another attempt already holds the empty draft for this
+          // project+template combination — reuse it instead of proceeding with
+          // our own now-orphaned docId.
+          const existingDraft = await pool.query(
+            `SELECT id FROM documents
+             WHERE project_id = $1
+               AND template_id IS NOT DISTINCT FROM $2
+               AND status = 'draft'
+               AND (content IS NULL OR content = '')
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [request.projectId, request.templateId || null]
+          )
+          if (existingDraft.rows.length > 0) {
+            docId = existingDraft.rows[0].id
+            logger.info(`[DOC-GEN] Reusing existing empty draft document ${docId} for project ${request.projectId} instead of creating a new one`)
+          }
+        }
+      }
       isDocumentCreated = true;
 
       // Load existing job data to check if this is a retry or has existing progress
@@ -614,6 +699,37 @@ class DocumentGenerationService {
 
       if (!generationPlan || !generationPlan.sections || generationPlan.sections.length === 0) {
         throw new Error("AI failed to return a valid document structure plan.")
+      }
+
+      // Absolute safety ceiling on planner sprawl for templates with no fixed structure.
+      // This is NOT a content cap: sections are never truncated (that silently drops
+      // whatever the plan judged necessary). A plan this large means the template's
+      // prompt/goal is asking for more than one reasonable document, so generation is
+      // aborted and a template review is flagged instead — the fix is to split the
+      // template into narrower ones and recombine the resulting documents at export
+      // time (DOCX/PDF/Markdown), not to keep stretching a single document.
+      if (this.getTemplateParagraphs(template).length === 0) {
+        const absoluteMaxSections = Number(process.env.DOC_GEN_ABSOLUTE_MAX_SECTIONS) || 20
+        if (generationPlan.sections.length > absoluteMaxSections) {
+          logger.error(`[AGENT] Plan proposed ${generationPlan.sections.length} sections — exceeds safety ceiling of ${absoluteMaxSections}. Aborting and flagging template for review.`)
+
+          if (template?.id) {
+            try {
+              const versionResult = await pool.query(`SELECT COUNT(*) FROM template_audits WHERE template_id = $1`, [template.id])
+              const version = Number(versionResult.rows[0].count) + 1
+              await templateAuditService.createPendingAudit(template.id, 'oversized_plan', version)
+            } catch (auditErr) {
+              logger.warn(`[AGENT] Failed to flag template ${template.id} for oversized-plan review (non-fatal)`, auditErr)
+            }
+          }
+
+          throw new Error(JSON.stringify({
+            error: "TEMPLATE_OVERSIZED_PLAN",
+            message: `The planner proposed ${generationPlan.sections.length} sections, exceeding the safety ceiling of ${absoluteMaxSections}. This template is asking for more than one reasonable document. A template review has been flagged — consider splitting this template into narrower ones and combining the resulting documents at export time (DOCX/PDF/Markdown).`,
+            proposedSectionCount: generationPlan.sections.length,
+            ceiling: absoluteMaxSections,
+          }))
+        }
       }
 
       logger.info(`[AGENT] Plan returned ${generationPlan.sections.length} required sections to draft.`)
@@ -786,7 +902,7 @@ class DocumentGenerationService {
       
       let currentScore = 100
       let attempts = 0
-      const MAX_RETRIES = 3
+      const MAX_RETRIES = Number(process.env.DOC_GEN_AUDIT_MAX_RETRIES) || 1
       const auditLog: any[] = []
 
       while (attempts < MAX_RETRIES) {
@@ -972,7 +1088,7 @@ Your task is to take the provided draft and generate four recursive context comp
 ${summarySample}
 ---`
 
-        const compilationResult = await unifiedAIService.generateStructuredObject({
+        const compilationResult = await this.withTimeout(unifiedAIService.generateStructuredObject({
           prompt,
           provider: request.provider,
           model: request.model,
@@ -980,7 +1096,7 @@ ${summarySample}
           schema: finalizationSchema,
           max_tokens: 16000, // Large budget for summaries
           traceName: 'agentic-doc-finalization-compaction'
-        })
+        }), 'Generate multi-scale summaries')
 
         const payload = compilationResult.object
 
@@ -1216,7 +1332,11 @@ Based on the type of error encountered, please follow these steps to resolve the
    If the error is related to the AI provider (e.g., Groq, OpenAI, Mistral, Gemini), the request may have timed out or hit rate/token limits.
    * **Action**: Wait a few moments and try generating the document again. If it persists, verify your API keys and model availability in the settings under [AI Models](/settings/ai-models).
 
-3. **System / Dependency Failures**:
+3. **Template Oversized (\`TEMPLATE_OVERSIZED_PLAN\`)**:
+   If the error indicates the planner proposed more sections than the safety ceiling allows, this template's prompt/goal is asking for more content than belongs in a single document. A template review has been automatically flagged.
+   * **Action**: Split this template into narrower templates, each covering a subset of the sections, and generate separate documents. Combine them at export time (DOCX/PDF/Markdown) rather than growing one document indefinitely.
+
+4. **System / Dependency Failures**:
    If this is a system database or queue error:
    * **Action**: Check if Postgres, Redis, or RabbitMQ are running and reachable by checking the server logs.
 
@@ -1337,9 +1457,9 @@ Based on the type of error encountered, please follow these steps to resolve the
     } else {
       const docType = params.template?.name || "unstructured document"
       plannerPrompt += `### Document Type: ${docType}\n`
-      plannerPrompt += `No pre-defined template structure is specified. Design a comprehensive, logical structure with as many sections as the document type and user request require. `
-      plannerPrompt += `For a Project Charter, Business Case, or similar governance document, aim for 10–18 sections covering all standard components. `
-      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, objectives, scope, stakeholders, risks, budget, timeline, governance, and any other relevant areas.`
+      plannerPrompt += `No pre-defined template structure is specified. Design a compact, logical structure covering only the most essential components. `
+      plannerPrompt += `Aim for 4–6 sections — merge closely related topics into one section rather than splitting them out (e.g. combine risks and constraints, or budget and timeline, where they naturally overlap). `
+      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, objectives, scope, stakeholders, risks, budget, timeline, governance, and any other relevant areas — but stay within the section budget above.`
       plannerPrompt += `\n\n`
     }
 
@@ -1351,7 +1471,7 @@ Based on the type of error encountered, please follow these steps to resolve the
     let responseText: string = "";
 
     try {
-      const result = await unifiedAIService.generateStructuredObject({
+      const result = await this.withTimeout(unifiedAIService.generateStructuredObject({
         prompt: plannerPrompt,
         provider: params.provider,
         model: params.model,
@@ -1361,7 +1481,7 @@ Based on the type of error encountered, please follow these steps to resolve the
         projectId: params.projectId,
         userId: params.userId,
         template_id: params.templateId,
-      })
+      }), 'Plan document structure')
       resultObject = result.object
       responseText = JSON.stringify(result.object, null, 2);
     } catch (e: any) {
@@ -1674,7 +1794,7 @@ Based on the type of error encountered, please follow these steps to resolve the
     
     try {
       const aiResponse = await this.retryOnRateLimit(
-        () => unifiedAIService.generate({
+        () => this.withTimeout(unifiedAIService.generate({
           prompt: sectionPrompt,
           provider: params.provider,
           model: params.model,
@@ -1684,7 +1804,7 @@ Based on the type of error encountered, please follow these steps to resolve the
           projectId: params.projectId,
           userId: params.userId,
           template_id: params.templateId,
-        }),
+        }), `Draft Section ${params.order + 1} (${params.task.heading})`),
         3,
         `Draft Section ${params.order + 1} (${params.task.heading})`
       )
@@ -1989,14 +2109,14 @@ ${auditSample}
     })
 
     try {
-      const result = await unifiedAIService.generateStructuredObject({
+      const result = await this.withTimeout(unifiedAIService.generateStructuredObject({
         prompt,
         provider: provider || 'default',
         model,
         temperature: 0.1,
         schema: auditSchema,
         traceName: 'agentic-policy-audit'
-      })
+      }), 'Audit document against policies')
       
       const payload = result.object
       
@@ -2151,7 +2271,7 @@ ${patchDocSample}
     })
 
     try {
-      const result = await unifiedAIService.generateStructuredObject({
+      const result = await this.withTimeout(unifiedAIService.generateStructuredObject({
         prompt,
         provider: provider || 'default',
         model,
@@ -2159,7 +2279,7 @@ ${patchDocSample}
         schema: patchSchema,
         max_tokens: 16000, // Large budget for patches
         traceName: 'agentic-policy-patch'
-      })
+      }), 'Patch document')
 
       const payload = result.object
       let patched = markdown

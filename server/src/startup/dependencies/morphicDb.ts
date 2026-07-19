@@ -10,7 +10,6 @@ export const morphicDbDependency: Dependency = {
   name: "Morphic DB",
   critical: false, // Not critical for the main ADPA system
   timeout: 30000,
-  // Uses DATABASE_URL fallback when MORPHIC_DATABASE_URL is unset — wait for main DB first.
   dependsOn: ["Database"],
   init: async () => {
     const startTime = Date.now()

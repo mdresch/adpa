@@ -3,7 +3,7 @@ import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import Joi from "joi"
 import * as stakeholderService from "../services/stakeholderService"
 import * as skillsService from "../services/skillsManagementService"

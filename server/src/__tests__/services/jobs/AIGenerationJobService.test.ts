@@ -1,8 +1,9 @@
 import { AIGenerationJobService } from '../../../services/jobs/AIGenerationJobService';
 import { documentGenerationService } from '../../../services/documentGenerationService';
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'generated-job-id'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'generated-job-id'),
 }));
 
 jest.mock('../../../services/documentGenerationService', () => ({
@@ -20,6 +21,17 @@ jest.mock('../../../services/queueService', () => ({
 jest.mock('../../../services/baselineService', () => ({
   baselineService: {
     validateDocumentAgainstBaseline: jest.fn().mockResolvedValue([]),
+  },
+}));
+
+// documentSummarizationService transitively pulls in unifiedAIService -> langfuse,
+// which hits a known ESM dynamic-import interop issue under ts-jest unrelated to
+// anything under test here (same class of problem the repo already works around
+// for @faker-js/faker in setup.ts).
+jest.mock('../../../services/documentSummarizationService', () => ({
+  DocumentSummarizationService: {
+    saveSummaries: jest.fn().mockResolvedValue(undefined),
+    generateMultiLevelSummaries: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -85,6 +97,12 @@ describe('AIGenerationJobService template usage', () => {
         if (sql.includes('SELECT * FROM documents WHERE id = $1')) {
           return { rows: [{ id: 'document-1', name: 'Solution Evaluation Plan' }], rowCount: 1 };
         }
+        // Concurrency claim guard (AIGenerationJobService.processJob): must
+        // succeed so this test exercises the real pipeline rather than hitting
+        // the "already claimed by another live invocation" skip path.
+        if (sql.includes('UPDATE jobs') && sql.includes('processing_started_at = CURRENT_TIMESTAMP') && sql.includes('RETURNING id')) {
+          return { rows: [{ id: 'job-1' }], rowCount: 1 };
+        }
         return { rows: [], rowCount: 1 };
       }),
     };
@@ -130,7 +148,15 @@ describe('AIGenerationJobService template usage', () => {
     });
 
     const database = {
-      query: jest.fn().mockResolvedValue({ rows: [], rowCount: 1 })
+      query: jest.fn(async (sql: string) => {
+        // Concurrency claim guard (AIGenerationJobService.processJob): must
+        // succeed so this test exercises the real pipeline rather than hitting
+        // the "already claimed by another live invocation" skip path.
+        if (sql.includes('UPDATE jobs') && sql.includes('processing_started_at = CURRENT_TIMESTAMP') && sql.includes('RETURNING id')) {
+          return { rows: [{ id: 'job-2' }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 1 };
+      })
     };
 
     const mockUpdateStatus = jest.fn();

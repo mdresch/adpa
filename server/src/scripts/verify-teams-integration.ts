@@ -6,7 +6,7 @@
 import { teamsService } from '../services/teamsService'
 import { pool, connectDatabase } from '../database/connection'
 import { escalationService } from '../services/escalationService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 async function runVerification() {
     console.log('Starting Microsoft Teams Integration Verification...');

@@ -6,31 +6,31 @@ BEGIN
     -- 1. satisfaction_surveys
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'satisfaction_surveys') THEN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'satisfaction_surveys' AND column_name = 'feedback_summary') THEN
-            ALTER TABLE satisfaction_surveys ADD COLUMN feedback_summary TEXT;
+            ALTER TABLE satisfaction_surveys ADD COLUMN IF NOT EXISTS feedback_summary TEXT;
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'satisfaction_surveys' AND column_name = 'themes') THEN
-            ALTER TABLE satisfaction_surveys ADD COLUMN themes TEXT[] DEFAULT '{}';
+            ALTER TABLE satisfaction_surveys ADD COLUMN IF NOT EXISTS themes TEXT[] DEFAULT '{}';
         END IF;
     END IF;
 
     -- 2. onboarding_offboarding
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'onboarding_offboarding') THEN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'onboarding_offboarding' AND column_name = 'checklist_status') THEN
-            ALTER TABLE onboarding_offboarding ADD COLUMN checklist_status TEXT;
+            ALTER TABLE onboarding_offboarding ADD COLUMN IF NOT EXISTS checklist_status TEXT;
         END IF;
     END IF;
 
     -- 3. contingency_reserves
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'contingency_reserves') THEN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'contingency_reserves' AND column_name = 'utilization') THEN
-            ALTER TABLE contingency_reserves ADD COLUMN utilization NUMERIC;
+            ALTER TABLE contingency_reserves ADD COLUMN IF NOT EXISTS utilization NUMERIC;
         END IF;
     END IF;
 
     -- 4. capacity_forecasts
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'capacity_forecasts') THEN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'capacity_forecasts' AND column_name = 'demand_hours') THEN
-            ALTER TABLE capacity_forecasts ADD COLUMN demand_hours INTEGER;
+            ALTER TABLE capacity_forecasts ADD COLUMN IF NOT EXISTS demand_hours INTEGER;
         END IF;
     END IF;
 

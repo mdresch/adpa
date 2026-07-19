@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken"
 import * as admin from "firebase-admin"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 
 // Default permissions for new JIT-provisioned users
 const DEFAULT_USER_PERMISSIONS = {

@@ -1,11 +1,13 @@
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => '11111111-1111-1111-1111-111111111111'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => '11111111-1111-1111-1111-111111111111'),
 }));
 
 import { pool } from '../database/connection';
 import { documentGenerationService } from '../services/documentGenerationService';
 import { unifiedAIService } from '../services/unifiedAIService';
 import { documentTemplateService } from '../modules/documentTemplates/service';
+import { templateAuditService } from '../services/templateAuditService';
 
 jest.mock('../database/connection', () => ({
   pool: {
@@ -68,6 +70,12 @@ jest.mock('../services/inlineEntityParserService', () => ({
 jest.mock('../services/compactorService', () => ({
   CompactorService: {
     generateMultiScaleSummaries: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+jest.mock('../services/templateAuditService', () => ({
+  templateAuditService: {
+    createPendingAudit: jest.fn().mockResolvedValue('audit-id'),
   },
 }));
 
@@ -383,6 +391,249 @@ describe('documentGenerationService template paragraph handling', () => {
 
     // Verify unifiedAIService.generate was called exactly once (for Section 2, index 1)
     expect(unifiedAIService.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('drafts every planned section without truncating when the plan is within the safety ceiling', async () => {
+    const service = documentGenerationService as any;
+    jest.spyOn(service, 'getProjectContext').mockResolvedValue({
+      id: 'project-1',
+      name: 'Large Scope Project',
+      framework: 'PMBOK 7',
+      status: 'active',
+      stakeholders: [],
+      documents: [],
+    });
+    jest.spyOn(service, 'getTemplate').mockResolvedValue({
+      id: 'template-1',
+      name: 'Unstructured Template',
+      framework: 'PMBOK 7',
+      template_paragraphs: [],
+    });
+    jest.spyOn(service, 'fetchContextItems').mockResolvedValue([]);
+
+    const sectionCount = 9;
+    (unifiedAIService.generateStructuredObject as jest.Mock).mockResolvedValue({
+      object: {
+        sections: Array.from({ length: sectionCount }, (_, index) => ({
+          heading: `## Section ${index + 1}`,
+          goal: `Write section ${index + 1}.`,
+          informational_needs: 'Project context.',
+        })),
+      },
+    });
+    (unifiedAIService.generate as jest.Mock).mockImplementation(async ({ prompt }: { prompt: string }) => {
+      const sectionHeader = prompt.match(/## Section \d+/)?.[0] ?? '## Section';
+      return {
+        content: `${sectionHeader}\n\nThis is mock section content that is longer than fifty characters to pass the draft integrity check.`,
+        usage: { total_tokens: 1 },
+      };
+    });
+
+    const result = await documentGenerationService.generateDocument({
+      projectId: 'project-1',
+      templateId: 'template-1',
+      userPrompt: 'Generate a document with many distinct sections.',
+      provider: 'google',
+      model: 'gemini-2.5-flash',
+      userId: 'user-1',
+    });
+
+    // Regression guard: this plan (9 sections) is under the 20-section safety ceiling
+    // and must NOT be silently truncated to the old default of 6 — every planned
+    // section must be drafted and present in the assembled document.
+    expect(result.metadata.context.agenticSectionsPlanned).toBe(sectionCount);
+    for (let i = 1; i <= sectionCount; i++) {
+      expect(result.content).toContain(`## Section ${i}`);
+    }
+    expect(templateAuditService.createPendingAudit).not.toHaveBeenCalled();
+  });
+
+  it('aborts and flags a template review when the plan exceeds the absolute safety ceiling, without truncating or drafting', async () => {
+    const service = documentGenerationService as any;
+    jest.spyOn(service, 'getProjectContext').mockResolvedValue({
+      id: 'project-1',
+      name: 'Runaway Scope Project',
+      framework: 'PMBOK 7',
+      status: 'active',
+      stakeholders: [],
+      documents: [],
+    });
+    jest.spyOn(service, 'getTemplate').mockResolvedValue({
+      id: 'template-2',
+      name: 'Runaway Template',
+      framework: 'PMBOK 7',
+      template_paragraphs: [],
+    });
+    jest.spyOn(service, 'fetchContextItems').mockResolvedValue([]);
+
+    (pool.query as jest.Mock).mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('SELECT COUNT(*) FROM template_audits')) {
+        return { rows: [{ count: '2' }] };
+      }
+      return { rows: [] };
+    });
+
+    const oversizedSectionCount = 25;
+    (unifiedAIService.generateStructuredObject as jest.Mock).mockResolvedValue({
+      object: {
+        sections: Array.from({ length: oversizedSectionCount }, (_, index) => ({
+          heading: `## Section ${index + 1}`,
+          goal: `Write section ${index + 1}.`,
+          informational_needs: 'Project context.',
+        })),
+      },
+    });
+
+    await expect(
+      documentGenerationService.generateDocument({
+        projectId: 'project-1',
+        templateId: 'template-2',
+        userPrompt: 'Generate a document covering everything imaginable.',
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        userId: 'user-1',
+      })
+    ).rejects.toThrow(/TEMPLATE_OVERSIZED_PLAN/);
+
+    // No section should be drafted — the safety ceiling aborts before drafting,
+    // it does not silently truncate the plan and draft a subset.
+    expect(unifiedAIService.generate).not.toHaveBeenCalled();
+
+    // A template review must be flagged (version = existing audit count + 1).
+    expect(templateAuditService.createPendingAudit).toHaveBeenCalledWith('template-2', 'oversized_plan', 3);
+  });
+
+  describe('placeholder draft document deduplication (idx_documents_one_empty_draft_per_template)', () => {
+    // Regression context: concurrent/redelivered attempts of the same ai-generate
+    // job each ran a SELECT-then-INSERT for an empty draft placeholder, each saw
+    // "no existing draft yet" (the other's INSERT hadn't committed), and each
+    // minted its own duplicate placeholder document — observed live, up to 9
+    // duplicate rows for a single logical generation. The fix makes the insert
+    // atomic against a partial unique index on (project_id, template_id) for
+    // empty drafts (migration 431), so a conflict is detected by Postgres itself
+    // instead of a racy application-level check.
+
+    it('mints a fresh placeholder document when no conflicting empty draft exists', async () => {
+      const service = documentGenerationService as any;
+      jest.spyOn(service, 'getProjectContext').mockResolvedValue({
+        id: 'project-1',
+        name: 'Fresh Draft Project',
+        framework: 'PMBOK 7',
+        status: 'active',
+        stakeholders: [],
+        documents: [],
+      });
+      jest.spyOn(service, 'getTemplate').mockResolvedValue({
+        id: 'template-1',
+        name: 'Some Template',
+        framework: 'PMBOK 7',
+        template_paragraphs: [],
+      });
+      jest.spyOn(service, 'fetchContextItems').mockResolvedValue([]);
+
+      (pool.query as jest.Mock).mockImplementation(async (sql: string) => {
+        if (typeof sql === 'string' && sql.includes('INSERT INTO documents')) {
+          // No conflict: the partial unique index lets this insert through and
+          // returns the freshly minted id.
+          return { rows: [{ id: '11111111-1111-1111-1111-111111111111' }] };
+        }
+        return { rows: [] };
+      });
+
+      (unifiedAIService.generateStructuredObject as jest.Mock).mockResolvedValue({
+        object: {
+          sections: [
+            { heading: '## Section 1', goal: 'Write section 1.', informational_needs: 'Project context.' },
+          ],
+        },
+      });
+      (unifiedAIService.generate as jest.Mock).mockResolvedValue({
+        content: '## Section 1\n\nThis is mock section content that is longer than fifty characters to pass the check.',
+        usage: { total_tokens: 1 },
+      });
+
+      const result = await documentGenerationService.generateDocument({
+        projectId: 'project-1',
+        templateId: 'template-1',
+        userPrompt: 'Generate a fresh document.',
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        userId: 'user-1',
+      });
+
+      expect(result.documentId).toBe('11111111-1111-1111-1111-111111111111');
+
+      const insertCall = (pool.query as jest.Mock).mock.calls.find(
+        ([sql]: [string]) => typeof sql === 'string' && sql.includes('INSERT INTO documents')
+      );
+      expect(insertCall![0]).toEqual(
+        expect.stringContaining("ON CONFLICT (project_id, template_id) WHERE status = 'draft'")
+      );
+    });
+
+    it('reuses the existing empty draft document instead of creating a duplicate when the atomic insert conflicts', async () => {
+      const service = documentGenerationService as any;
+      jest.spyOn(service, 'getProjectContext').mockResolvedValue({
+        id: 'project-1',
+        name: 'Racing Attempts Project',
+        framework: 'PMBOK 7',
+        status: 'active',
+        stakeholders: [],
+        documents: [],
+      });
+      jest.spyOn(service, 'getTemplate').mockResolvedValue({
+        id: 'template-1',
+        name: 'Some Template',
+        framework: 'PMBOK 7',
+        template_paragraphs: [],
+      });
+      jest.spyOn(service, 'fetchContextItems').mockResolvedValue([]);
+
+      const existingDraftId = 'existing-draft-id-0000-0000-0000-000000000000';
+
+      (pool.query as jest.Mock).mockImplementation(async (sql: string) => {
+        if (typeof sql === 'string' && sql.includes('INSERT INTO documents')) {
+          // Conflict: another attempt already holds the empty draft for this
+          // project+template combination — ON CONFLICT DO NOTHING returns no row.
+          return { rows: [] };
+        }
+        if (
+          typeof sql === 'string' &&
+          sql.includes('FROM documents') &&
+          sql.includes("status = 'draft'") &&
+          sql.includes('ORDER BY created_at DESC')
+        ) {
+          return { rows: [{ id: existingDraftId }] };
+        }
+        return { rows: [] };
+      });
+
+      (unifiedAIService.generateStructuredObject as jest.Mock).mockResolvedValue({
+        object: {
+          sections: [
+            { heading: '## Section 1', goal: 'Write section 1.', informational_needs: 'Project context.' },
+          ],
+        },
+      });
+      (unifiedAIService.generate as jest.Mock).mockResolvedValue({
+        content: '## Section 1\n\nThis is mock section content that is longer than fifty characters to pass the check.',
+        usage: { total_tokens: 1 },
+      });
+
+      const result = await documentGenerationService.generateDocument({
+        projectId: 'project-1',
+        templateId: 'template-1',
+        userPrompt: 'Generate a document while another attempt is in flight.',
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        userId: 'user-1',
+      });
+
+      // Must reuse the pre-existing draft's id, never the freshly minted uuid —
+      // this is what prevents the duplicate document row.
+      expect(result.documentId).toBe(existingDraftId);
+      expect(result.documentId).not.toBe('11111111-1111-1111-1111-111111111111');
+    });
   });
 });
 

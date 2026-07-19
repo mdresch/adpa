@@ -7,12 +7,13 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import { openaiConnector } from '../modules/ai/openai'
 import { googleConnector } from '../modules/ai/google'
 import { azureConnector } from '../modules/ai/azure'
 import { mistralConnector } from '../modules/ai/mistral'
 import { foundryLocalConnector } from '../modules/ai/foundry-local'
+import Anthropic from '@anthropic-ai/sdk'
 
 // AI Provider Types
 export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface' | 'ollama' | 'deepseek' | 'moonshot' | 'xai' | 'groq' | 'mistral' | 'foundry-local'
@@ -248,7 +249,7 @@ class AIProviderService {
    * Add a new provider
    */
   async addProvider(config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-    const id = uuidv4()
+    const id = randomUUID()
 
     try {
       // Encrypt API key
@@ -690,24 +691,63 @@ class AnthropicProvider implements AIProvider {
     this.type = config.type
   }
 
+  private getClient(): Anthropic {
+    return new Anthropic({ apiKey: this.config.apiKey })
+  }
+
   async generate(request: AIRequest): Promise<AIResponse> {
-    logger.warn(`[MOCK] Using mock Anthropic generation for ${this.name}.`);
+    const client = this.getClient()
+    const messages = (request.messages || [{ role: 'user' as const, content: request.prompt }])
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+    const systemPrompt = request.systemPrompt || request.messages?.find(m => m.role === 'system')?.content
+
+    const response = await client.messages.create({
+      model: request.model || this.config.model || 'claude-sonnet-5',
+      max_tokens: request.maxTokens || 4096,
+      system: systemPrompt || undefined,
+      messages,
+    })
+
+    const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+
     return {
-      content: `Mock Anthropic response for: ${request.prompt}`,
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      model: this.config.model || 'claude-3-sonnet',
+      content: textBlock?.text || '',
+      usage: response.usage ? {
+        promptTokens: response.usage.input_tokens,
+        completionTokens: response.usage.output_tokens,
+        totalTokens: response.usage.input_tokens + response.usage.output_tokens
+      } : undefined,
+      model: response.model,
       provider: this.config.name,
-      finishReason: 'stop'
+      finishReason: response.stop_reason || undefined
     }
   }
 
   async test(): Promise<boolean> {
-    return true; 
+    try {
+      const client = this.getClient()
+      await client.models.retrieve('claude-haiku-4-5')
+      return true
+    } catch (error) {
+      logger.error(`Anthropic connection test failed for ${this.name}:`, error)
+      return false
+    }
   }
 
   async getModels(): Promise<string[]> {
-    // Anthropic currently doesn't have a public models list API
-    return ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest']
+    try {
+      const client = this.getClient()
+      const models: string[] = []
+      for await (const model of client.models.list()) {
+        models.push(model.id)
+      }
+      if (!models.length) throw new Error('No models returned from API')
+      return models
+    } catch (error: any) {
+      logger.error(`Failed to discover Anthropic models for ${this.config.name}:`, error)
+      throw new Error(`Model discovery failed for ${this.config.name}: ${error.message || 'Unknown error'}`)
+    }
   }
 }
 

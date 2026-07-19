@@ -1199,51 +1199,69 @@ class AIService {
             apiKey: directApiKey
           })
 
-          // Anthropic model name mapping - use full model names with date suffixes or -latest
-          // Valid model names: claude-3-5-sonnet-20241022, claude-3-5-sonnet-latest, claude-3-opus-20240229, etc.
+          // Anthropic model name mapping - current model IDs are bare strings with no
+          // date suffix (e.g. claude-opus-4-8) - see shared/models.md in the claude-api skill
+          // for the authoritative catalog. Retired/dated IDs (claude-3-5-sonnet-20241022,
+          // claude-3-opus-20240229, etc.) 404 against the live API.
           const normalizeAnthropicModel = (model: string): string => {
-            if (!model) return 'claude-sonnet-4-20250514'
+            if (!model) return 'claude-sonnet-5'
 
-            // Map short names to full valid Anthropic model names
+            // Map short/legacy names to current valid Anthropic model IDs
             const modelMappings: Record<string, string> = {
-              'claude-3-5-sonnet': 'claude-sonnet-4-20250514',
-              'claude-3.5-sonnet': 'claude-sonnet-4-20250514',
-              'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
-              'claude-3.5-haiku': 'claude-3-5-haiku-20241022',
-              'claude-3-opus': 'claude-3-opus-20240229',
-              'claude-3.0-opus': 'claude-3-opus-20240229',
-              'claude-sonnet-4.0': 'claude-sonnet-4-20250514',
-              'claude-4-sonnet': 'claude-sonnet-4-20250514',
-              'claude-haiku-4.0': 'claude-3-5-haiku-20241022',
-              'claude-4-haiku': 'claude-3-5-haiku-20241022',
-              'claude-opus-4.0': 'claude-3-opus-20240229',
-              'claude-4-opus': 'claude-3-opus-20240229'
+              'claude-opus': 'claude-opus-4-8',
+              'claude-4-opus': 'claude-opus-4-8',
+              'claude-opus-4.0': 'claude-opus-4-8',
+              'claude-opus-4.6': 'claude-opus-4-8',
+              'claude-opus-4.7': 'claude-opus-4-8',
+              'claude-3-opus': 'claude-opus-4-8',
+              'claude-3.0-opus': 'claude-opus-4-8',
+              'claude-sonnet': 'claude-sonnet-5',
+              'claude-4-sonnet': 'claude-sonnet-5',
+              'claude-sonnet-4.0': 'claude-sonnet-5',
+              'claude-sonnet-4.6': 'claude-sonnet-5',
+              'claude-3-5-sonnet': 'claude-sonnet-5',
+              'claude-3.5-sonnet': 'claude-sonnet-5',
+              'claude-haiku': 'claude-haiku-4-5',
+              'claude-4-haiku': 'claude-haiku-4-5',
+              'claude-haiku-4.0': 'claude-haiku-4-5',
+              'claude-3-5-haiku': 'claude-haiku-4-5',
+              'claude-3.5-haiku': 'claude-haiku-4-5',
             }
 
-            // If model already has a date suffix (YYYYMMDD), it's already valid
+            // Already a current bare model ID (no date suffix) - pass through
             const dateSuffixPattern = /-\d{8}$/
-            if (dateSuffixPattern.test(model)) {
+            if (!dateSuffixPattern.test(model) && !model.endsWith('-latest')) {
+              const mapped = modelMappings[model.toLowerCase()] || modelMappings[model]
+              if (mapped) {
+                logger.debug(`[AI-SERVICE] Mapped Anthropic model: ${model} -> ${mapped}`)
+                return mapped
+              }
               return model
             }
 
-            // If model ends with -latest, it's already valid
-            if (model.endsWith('-latest')) {
-              return model
+            // Dated/-latest alias referencing a retired model - map to its current replacement
+            const retiredMappings: Record<string, string> = {
+              'claude-3-5-sonnet-20241022': 'claude-sonnet-5',
+              'claude-3-5-sonnet-20240620': 'claude-sonnet-5',
+              'claude-3-5-sonnet-latest': 'claude-sonnet-5',
+              'claude-3-7-sonnet-20250219': 'claude-sonnet-5',
+              'claude-3-5-haiku-20241022': 'claude-haiku-4-5',
+              'claude-3-5-haiku-latest': 'claude-haiku-4-5',
+              'claude-3-opus-20240229': 'claude-opus-4-8',
+              'claude-3-opus-latest': 'claude-opus-4-8',
+              'claude-sonnet-4-20250514': 'claude-sonnet-5',
+            }
+            if (retiredMappings[model]) {
+              logger.info(`[AI-SERVICE] Anthropic model ${model} is retired, using ${retiredMappings[model]} instead`)
+              return retiredMappings[model]
             }
 
-            // Map short name to full name
-            const mapped = modelMappings[model.toLowerCase()] || modelMappings[model]
-            if (mapped) {
-              logger.debug(`[AI-SERVICE] Mapped Anthropic model: ${model} -> ${mapped}`)
-              return mapped
-            }
-
-            // If no mapping found, return as-is and let Anthropic API validate
+            // Unknown dated/-latest string - let the Anthropic API validate it
             return model
           }
 
           // Use the model name provided by the user, normalized
-          const rawModelName = request.model || 'claude-sonnet-4-20250514'
+          const rawModelName = request.model || 'claude-sonnet-5'
           const modelName = normalizeAnthropicModel(rawModelName)
 
           logger.info(`[AI-SERVICE] Anthropic model: ${modelName}${rawModelName !== modelName ? ` (normalized from ${rawModelName})` : ''}`)
@@ -2311,7 +2329,7 @@ class AIService {
       'google': GOOGLE_PRIMARY_MODEL,
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-2411',
-      'anthropic': 'claude-3-5-sonnet-latest',
+      'anthropic': 'claude-sonnet-5',
       'azure': 'gpt-4',
       'deepseek': 'deepseek-chat',
       'moonshot': 'kimi-k2-0905-preview',

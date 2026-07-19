@@ -158,7 +158,7 @@ public class RitualController(
         {
             logger.LogInformation("Attempting to approve Business Case: {BusinessCaseId}", businessCaseId);
 
-            var gate = approvalGate.EnsureJitApproval(TaskApprovalScopes.Phase0Approve, businessCaseId, body.Approval);
+            var gate = await approvalGate.EnsureJitApproval(TaskApprovalScopes.Phase0Approve, businessCaseId, body.Approval, User);
             if (gate is not null)
                 return gate;
 
@@ -381,7 +381,7 @@ public class RitualController(
     {
         try
         {
-            var gate = approvalGate.EnsureJitApproval(TaskApprovalScopes.RtmApplyAmendment, request.AmendmentId, request.Approval);
+            var gate = await approvalGate.EnsureJitApproval(TaskApprovalScopes.RtmApplyAmendment, request.AmendmentId, request.Approval, User);
             if (gate is not null)
                 return gate;
 

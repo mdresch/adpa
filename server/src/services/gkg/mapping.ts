@@ -28,6 +28,7 @@ export const ENTITY_MAPPINGS: EntityMapping[] = [
   { adpaTable: "phases", gkgEntityType: "Phase", summaryColumns: ["name", "description"], documentIdColumn: "source_document_id" },
   { adpaTable: "activities", gkgEntityType: "Activity", summaryColumns: ["name", "title", "description"], documentIdColumn: "source_document_id" },
   { adpaTable: "work_items", gkgEntityType: "WorkItem", summaryColumns: ["title", "name", "description"], documentIdColumn: "source_document_id" },
+  { adpaTable: "onboarding_offboarding", gkgEntityType: "OnboardingOffboarding", summaryColumns: ["resource_name", "notes", "description"], documentIdColumn: "source_document_id" },
   { adpaTable: "scope_baseline", gkgEntityType: "ScopeBaseline", summaryColumns: ["name", "description"], documentIdColumn: "source_document_id" },
   { adpaTable: "wbs_nodes", gkgEntityType: "WBSNode", summaryColumns: ["name", "code", "description"], documentIdColumn: "source_document_id" },
   { adpaTable: "budget_baseline", gkgEntityType: "BudgetBaseline", summaryColumns: ["name", "description"], documentIdColumn: "source_document_id" },

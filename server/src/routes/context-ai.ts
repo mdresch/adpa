@@ -12,7 +12,7 @@ import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import Joi from "joi"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 import { aiService } from "../services/aiService"
 
 const router = express.Router()

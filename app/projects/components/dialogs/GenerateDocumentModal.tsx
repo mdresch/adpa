@@ -36,9 +36,8 @@ function getPlus5WorkingDaysDate(): string {
 const EMPTY_GENERATION_FORM: DocumentGenerationForm = {
   name: "",
   template_id: "",
-  prompt: "",
-  provider: "Groq AI",
-  model: "llama-3.1-8b-instant",
+  provider: "",
+  model: "",
   temperature: 0.7,
   max_tokens: 4000,
   project_id: "",
@@ -57,13 +56,23 @@ const EMPTY_PROGRESS: GenerationProgress = {
   percentage: 0,
 }
 
+// The generation prompt is never user-edited — the template's own system_prompt
+// and template_paragraphs (plus context injection) determine document structure
+// and content server-side. This only supplies the required, non-empty top-level
+// directive the API schema expects.
+function buildGenerationPrompt(project: Project, template?: Template): string {
+  if (template) {
+    return `Generate the "${template.name}" document for the ${project.name} project.`
+  }
+  return `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework.`
+}
+
 function buildInitialForm(project: Project, userId?: string, framework?: string): DocumentGenerationForm {
   return {
     name: `${project.name} - Generated Document`,
     template_id: "",
-    prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
-    provider: "Groq AI",
-    model: "llama-3.1-8b-instant",
+    provider: "",
+    model: "",
     temperature: 0.7,
     max_tokens: 4000,
     project_id: project.id,
@@ -121,6 +130,16 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
     }
   }, [isOpen, project])
 
+  // Default the AI provider/model to the first environment-active provider once the
+  // list loads, instead of a hardcoded label (e.g. "Groq AI") that may not be configured
+  // in every environment — submitting an inactive/unconfigured provider fails every time.
+  useEffect(() => {
+    if (!isOpen || form.provider || aiProviders.length === 0) return
+    const first = aiProviders[0]
+    const defaultModel = first.default_model || (first.models && first.models[0]) || ""
+    setForm((f) => ({ ...f, provider: first.name || first.id, model: defaultModel }))
+  }, [isOpen, aiProviders, form.provider])
+
   const handleClose = (open: boolean) => {
     if (!open && !generating) {
       onClose()
@@ -132,13 +151,19 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
 
     if (!project) return
 
-    if (!form.name || !form.prompt) {
+    if (!form.name) {
       toast.error("Please fill in required fields")
       return
     }
 
+    if (!form.provider || !form.model) {
+      toast.error("No active AI provider is configured. Contact an administrator before generating documents.")
+      return
+    }
+
     const startTime = Date.now()
-    const templateName = templates.find((t) => t.id === form.template_id)?.name || "Custom"
+    const selectedTemplate = templates.find((t) => t.id === form.template_id)
+    const templateName = selectedTemplate?.name || "Custom"
 
     try {
       setGenerating(true)
@@ -146,40 +171,52 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
       trackFeatureUsage("template_generation", "started", {
         project_id: project.id,
         template_name: templateName,
-        provider: form.provider || "Groq AI",
-        model: form.model || "llama-3.1-8b-instant",
+        provider: form.provider,
+        model: form.model,
       })
 
       setProgress({
         step: 1,
         totalSteps: 2,
-        message: "Queueing document generation...",
+        message: form.template_id ? "Queueing document generation..." : "Generating document...",
         percentage: 50,
       })
 
-      // Dispatch to the background queue
-      await apiClient.post<{ jobId: string; async: boolean }>(`/document-generation/generate`, {
+      // Let the route decide sync vs. async (it forces async for any template-based
+      // generation regardless of what we send here — see shouldRunAsync in
+      // documentGeneration.ts). We only need to request it explicitly for the
+      // prompt-only case if we ever want to force backgrounding; we don't, so the
+      // route runs prompt-only requests synchronously and returns the document directly.
+      const response = await apiClient.post<
+        | { jobId: string; async: true; message?: string }
+        | { message: string; document: Record<string, unknown> }
+      >(`/document-generation/generate`, {
         projectId: project.id,
         name: form.name,
         templateId: form.template_id || undefined,
-        userPrompt: form.prompt,
-        provider: form.provider || "Groq AI",
-        model: form.model || "llama-3.1-8b-instant",
+        userPrompt: buildGenerationPrompt(project, selectedTemplate),
+        provider: form.provider,
+        model: form.model,
         temperature: form.temperature || 0.7,
         max_tokens: form.max_tokens,
-        async: true,
         generation_metadata: form.metadata,
       })
+
+      const wasQueued = 'jobId' in response && !!response.jobId
 
       setProgress({
         step: 2,
         totalSteps: 2,
-        message: "Document generation queued!",
+        message: wasQueued ? "Document generation queued!" : "Document generated!",
         percentage: 100,
       })
 
-      toast.success("Document generation has been queued and will run in the background.")
-      
+      toast.success(
+        wasQueued
+          ? "Document generation has been queued and will run in the background."
+          : "Document generated successfully."
+      )
+
       // Close modal immediately and let DocumentsTab overlay handle the rest
       setTimeout(() => {
         onClose()
@@ -192,7 +229,7 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
       trackFeatureUsage("template_generation", "failed", {
         project_id: project.id,
         template_name: templateName,
-        provider: form.provider || "Groq AI",
+        provider: form.provider,
         error_type: "generation_error",
       })
       toast.error("Failed to queue document generation")

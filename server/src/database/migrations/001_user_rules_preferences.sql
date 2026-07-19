@@ -2,7 +2,7 @@
 -- This migration adds comprehensive user rules and preferences management
 
 -- User Rules table for custom business rules
-CREATE TABLE user_rules (
+CREATE TABLE IF NOT EXISTS user_rules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -22,22 +22,16 @@ CREATE TABLE user_rules (
     updated_by UUID REFERENCES users(id)
 );
 
--- User Preferences table for UI and behavior preferences
-CREATE TABLE user_preferences (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    category VARCHAR(100) NOT NULL, -- 'ui', 'notifications', 'workflow', 'integrations', 'security'
-    preference_key VARCHAR(255) NOT NULL,
-    preference_value JSONB NOT NULL,
-    is_encrypted BOOLEAN DEFAULT false, -- For sensitive preferences
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, category, preference_key)
-);
+-- NOTE: this migration originally also created a category/key-value-style
+-- "user_preferences" table here. Production's actual user_preferences table
+-- (see server/migrations/000_baseline.sql) is a different, incompatible
+-- design -- one structured row per user (language/timezone/theme/notifications
+-- jsonb columns), not a multi-row category+key store. That table already
+-- exists and is in active use, so the key-value version is intentionally not
+-- created here to avoid colliding with it.
 
 -- Rule Templates for common rule patterns
-CREATE TABLE rule_templates (
+CREATE TABLE IF NOT EXISTS rule_templates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -55,7 +49,7 @@ CREATE TABLE rule_templates (
 );
 
 -- Rule Execution Log for auditing and debugging
-CREATE TABLE rule_executions (
+CREATE TABLE IF NOT EXISTS rule_executions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     rule_id UUID REFERENCES user_rules(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id),
@@ -70,7 +64,7 @@ CREATE TABLE rule_executions (
 );
 
 -- User Rule Groups for organizing related rules
-CREATE TABLE user_rule_groups (
+CREATE TABLE IF NOT EXISTS user_rule_groups (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -83,7 +77,7 @@ CREATE TABLE user_rule_groups (
 );
 
 -- Many-to-many relationship between rules and rule groups
-CREATE TABLE user_rule_group_memberships (
+CREATE TABLE IF NOT EXISTS user_rule_group_memberships (
     rule_id UUID REFERENCES user_rules(id) ON DELETE CASCADE,
     group_id UUID REFERENCES user_rule_groups(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -91,14 +85,13 @@ CREATE TABLE user_rule_group_memberships (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_user_rules_user_id ON user_rules(user_id);
-CREATE INDEX idx_user_rules_type ON user_rules(rule_type);
-CREATE INDEX idx_user_rules_scope ON user_rules(scope, scope_id);
-CREATE INDEX idx_user_rules_active ON user_rules(is_active);
-CREATE INDEX idx_user_preferences_user_category ON user_preferences(user_id, category);
-CREATE INDEX idx_rule_executions_rule_id ON rule_executions(rule_id);
-CREATE INDEX idx_rule_executions_user_id ON rule_executions(user_id);
-CREATE INDEX idx_rule_executions_executed_at ON rule_executions(executed_at);
+CREATE INDEX IF NOT EXISTS idx_user_rules_user_id ON user_rules(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_rules_type ON user_rules(rule_type);
+CREATE INDEX IF NOT EXISTS idx_user_rules_scope ON user_rules(scope, scope_id);
+CREATE INDEX IF NOT EXISTS idx_user_rules_active ON user_rules(is_active);
+CREATE INDEX IF NOT EXISTS idx_rule_executions_rule_id ON rule_executions(rule_id);
+CREATE INDEX IF NOT EXISTS idx_rule_executions_user_id ON rule_executions(user_id);
+CREATE INDEX IF NOT EXISTS idx_rule_executions_executed_at ON rule_executions(executed_at);
 
 -- Triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -109,9 +102,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_user_rules_updated_at ON user_rules;
 CREATE TRIGGER update_user_rules_updated_at BEFORE UPDATE ON user_rules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_rule_templates_updated_at ON rule_templates;
 CREATE TRIGGER update_rule_templates_updated_at BEFORE UPDATE ON rule_templates FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_user_rule_groups_updated_at ON user_rule_groups;
 CREATE TRIGGER update_user_rule_groups_updated_at BEFORE UPDATE ON user_rule_groups FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert default rule templates
@@ -160,31 +155,6 @@ INSERT INTO rule_templates (name, description, rule_type, template_conditions, t
     '{"action": "generate_report", "template": "weekly_project_summary", "recipients": "project_stakeholders"}',
     'project_management',
     true
-);
-
--- Insert default user preferences
-INSERT INTO user_preferences (user_id, category, preference_key, preference_value) 
-SELECT 
-    u.id,
-    'ui',
-    'theme',
-    '{"mode": "system", "primary_color": "blue", "sidebar_collapsed": false}'::jsonb
-FROM users u
-WHERE NOT EXISTS (
-    SELECT 1 FROM user_preferences up 
-    WHERE up.user_id = u.id AND up.category = 'ui' AND up.preference_key = 'theme'
-);
-
-INSERT INTO user_preferences (user_id, category, preference_key, preference_value)
-SELECT 
-    u.id,
-    'notifications',
-    'default_settings',
-    '{"email": true, "in_app": true, "push": false, "frequency": "immediate"}'::jsonb
-FROM users u
-WHERE NOT EXISTS (
-    SELECT 1 FROM user_preferences up 
-    WHERE up.user_id = u.id AND up.category = 'notifications' AND up.preference_key = 'default_settings'
 );
 
 -- Create default rule group for each user

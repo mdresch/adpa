@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger'
 import { aiService } from '../aiService'
 import { ContextAwareAIService } from '../../modules/context/integration'
 import { io } from '@/socket'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
 import type { AIGenerationJobData, JobStatus, QueueName } from './types'
@@ -94,6 +94,64 @@ export class AIGenerationJobService {
 
     // Ensure we have a valid jobId
     const actualJobId = jobId || job.id.toString()
+
+    // Idempotency guard: check authoritative DB state (a document already tagged
+    // with this job id) rather than trusting jobData.documentId from the delivered
+    // message payload. A message redelivered from before the docId-reuse fix (or
+    // any other at-least-once broker redelivery) carries the *original* payload
+    // with no documentId — trusting it would mint another duplicate document. This
+    // check catches that case regardless of what the payload says.
+    try {
+      const existing = await db.query(
+        `SELECT id FROM documents WHERE generation_metadata->>'job_id' = $1 LIMIT 1`,
+        [actualJobId]
+      )
+      if (existing.rows.length > 0) {
+        const existingDocumentId = existing.rows[0].id
+        log.warn(`[AIGenerationJobService] Job ${actualJobId} already produced document ${existingDocumentId} — skipping reprocessing`, { jobId: actualJobId, existingDocumentId })
+        await updateJobStatus(actualJobId, "completed", 100, workerId, "ai-processing")
+        return { ai: null, documentId: existingDocumentId, skipped: true, reason: 'already produced a document for this job id' }
+      }
+    } catch (idempotencyCheckErr) {
+      log.warn('[AIGenerationJobService] Idempotency check failed (non-fatal, proceeding with generation)', {
+        jobId: actualJobId,
+        error: idempotencyCheckErr instanceof Error ? idempotencyCheckErr.message : String(idempotencyCheckErr),
+      })
+    }
+
+    // Concurrency guard: atomically claim exclusive ownership of this job before
+    // doing any real work. A message can be delivered to more than one live
+    // handler invocation regardless of *why* — a dropped RabbitMQ channel
+    // triggering amqp-connection-manager's reconnect-and-redeliver, a broker
+    // consumer_timeout, a manual retry racing an in-flight attempt, or (in a
+    // future multi-node deployment) two separate workers entirely. This guard
+    // doesn't need to know why: it makes Postgres's row-level UPDATE atomicity
+    // the sole arbiter of "who gets to process this job right now," which holds
+    // regardless of the broker's state. `processing_started_at` doubles as the
+    // liveness heartbeat (already refreshed every 4s by startProgressHeartbeat
+    // below) and the staleness threshold — a lease with no heartbeat in the
+    // last AI_GENERATE_CLAIM_STALE_SECONDS is presumed dead and may be reclaimed.
+    const claimStaleSeconds = Number(process.env.AI_GENERATE_CLAIM_STALE_SECONDS) || 30
+    try {
+      const claim = await db.query(
+        `UPDATE jobs
+         SET status = 'processing', worker_id = $2, processing_started_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+           AND status NOT IN ('cancelled', 'completed', 'failed')
+           AND (processing_started_at IS NULL OR processing_started_at < NOW() - ($3::int * INTERVAL '1 second'))
+         RETURNING id`,
+        [actualJobId, workerId, claimStaleSeconds]
+      )
+      if (claim.rows.length === 0) {
+        log.warn(`[AIGenerationJobService] Job ${actualJobId} is already being processed by another live invocation — skipping`, { jobId: actualJobId })
+        return { ai: null, documentId: null, skipped: true, reason: 'job already claimed by an in-flight attempt' }
+      }
+    } catch (claimErr) {
+      log.warn('[AIGenerationJobService] Concurrency claim check failed (non-fatal, proceeding with generation)', {
+        jobId: actualJobId,
+        error: claimErr instanceof Error ? claimErr.message : String(claimErr),
+      })
+    }
 
     try {
       // Update job status to processing and assign worker
@@ -258,7 +316,31 @@ export class AIGenerationJobService {
       // Lazy import to avoid circular dependency at module load time
       const { documentGenerationService } = await Promise.resolve().then(() => require('../documentGenerationService'))
 
-      const docId = uuidv4()
+      // Reuse the document id from a prior attempt of this same job if one exists —
+      // documentGenerationService pre-inserts a draft row keyed by this id and its
+      // insert is idempotent (ON CONFLICT DO NOTHING), so reusing it means a retry
+      // resumes/overwrites the same draft instead of minting a brand new blank
+      // document every time this job gets reprocessed (queue redelivery, manual
+      // retry, etc). Persist it back onto the job row immediately so any future
+      // reprocessing of this same job id also sees it.
+      const docId = jobData.documentId || uuidv4()
+      if (!jobData.documentId) {
+        const jobIdForPersist = jobData.jobId || actualJobId
+        if (jobIdForPersist) {
+          try {
+            const db = deps?.database || { query: pool.query.bind(pool) } as any
+            await db.query(
+              `UPDATE jobs SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{documentId}', to_jsonb($1::text)) WHERE id = $2`,
+              [docId, jobIdForPersist]
+            )
+          } catch (persistErr) {
+            log.warn('[AIGenerationJobService] Failed to persist documentId onto job row (non-fatal)', {
+              jobId: jobIdForPersist,
+              error: persistErr instanceof Error ? persistErr.message : String(persistErr),
+            })
+          }
+        }
+      }
 
       const agenticResult = await documentGenerationService.generateDocument({
         jobId: jobData.jobId || actualJobId,
@@ -691,6 +773,15 @@ export class AIGenerationJobService {
 
     } catch (docErr: any) {
       log.error(`Failed to create document for job ${jobId}:`, docErr)
+      if (!createdDocumentId) {
+        // The document itself was never persisted (the INSERT above threw, or a
+        // step before it did) — this is a genuine generation failure, not a
+        // secondary bookkeeping hiccup like a template-usage-tracking error after
+        // the document already exists. Rethrow so the caller's catch marks the
+        // job 'failed' instead of silently reporting 'completed' with no document
+        // to show for it (REQ-005).
+        throw docErr
+      }
     }
 
     return createdDocumentId
@@ -854,7 +945,7 @@ export class AIGenerationJobService {
     try {
       const providerResult = await db.query('SELECT id FROM ai_providers WHERE name = $1 LIMIT 1', [jobData.provider || 'openai'])
       if (providerResult.rows.length > 0) {
-        await db.query(`INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values) VALUES ($1, $2, $3, $4, $5)`, [jobData.userId || null, 'ai_generate', 'ai_provider', providerResult.rows[0].id, JSON.stringify({ provider: jobData.provider, model: jobData.model, template_id: jobData.template_id, document_id: documentId, job_id: jobData.jobId, usage: result?.usage || {} })])
+        await db.query(`INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values) VALUES ($1, $2, $3, $4, $5)`, [jobData.userId || null, 'ai_generate', 'ai_provider', providerResult.rows[0].id, JSON.stringify({ provider: jobData.provider, model: jobData.model, template_id: jobData.template_id, document_id: documentId, job_id: jobData.jobId, usage: result?.usage || {} })])
       }
     } catch (err) { }
   }

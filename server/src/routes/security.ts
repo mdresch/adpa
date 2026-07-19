@@ -4,7 +4,7 @@ import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validateQuery, validateParams } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
-import { v4 as uuidv4 } from "uuid"
+import { randomUUID as uuidv4 } from 'crypto'
 
 const router = express.Router()
 
@@ -342,10 +342,17 @@ router.get("/audit",
       const { page = 1, limit = 20, user_id, action, resource_type, start_date, end_date } = req.query
       const offset = (Number(page) - 1) * Number(limit)
 
+      // audit_log is the unified (formerly audit_logs + audit_log) hash-chained audit
+      // trail; columns are aliased back to the pre-merge names so this endpoint's
+      // response shape doesn't change for existing consumers.
       let query = `
-        SELECT al.*, u.name as user_name, u.email as user_email
-        FROM audit_logs al
-        LEFT JOIN users u ON al.user_id = u.id
+        SELECT al.id, al.occurred_at as created_at, al.actor_user_id as user_id,
+               al.table_name as resource_type, al.row_id as resource_id,
+               al.action, al.reason, al.old_values, al.new_values,
+               al.ip as ip_address, al.user_agent, al.prev_hash, al.hash,
+               u.name as user_name, u.email as user_email
+        FROM audit_log al
+        LEFT JOIN users u ON al.actor_user_id = u.id
         WHERE 1=1
       `
 
@@ -354,7 +361,7 @@ router.get("/audit",
 
       if (user_id) {
         paramCount++
-        query += ` AND al.user_id = $${paramCount}`
+        query += ` AND al.actor_user_id = $${paramCount}`
         params.push(user_id)
       }
 
@@ -366,35 +373,35 @@ router.get("/audit",
 
       if (resource_type) {
         paramCount++
-        query += ` AND al.resource_type = $${paramCount}`
+        query += ` AND al.table_name = $${paramCount}`
         params.push(resource_type)
       }
 
       if (start_date) {
         paramCount++
-        query += ` AND al.created_at >= $${paramCount}`
+        query += ` AND al.occurred_at >= $${paramCount}`
         params.push(start_date)
       }
 
       if (end_date) {
         paramCount++
-        query += ` AND al.created_at <= $${paramCount}`
+        query += ` AND al.occurred_at <= $${paramCount}`
         params.push(end_date)
       }
 
-      query += ` ORDER BY al.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
+      query += ` ORDER BY al.occurred_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
       params.push(limit, offset)
 
       const result = await pool.query(query, params)
 
       // Get total count with same filters
-      let countQuery = "SELECT COUNT(*) FROM audit_logs al WHERE 1=1"
+      let countQuery = "SELECT COUNT(*) FROM audit_log al WHERE 1=1"
       const countParams: any[] = []
       let countParamCount = 0
 
       if (user_id) {
         countParamCount++
-        countQuery += ` AND al.user_id = $${countParamCount}`
+        countQuery += ` AND al.actor_user_id = $${countParamCount}`
         countParams.push(user_id)
       }
 
@@ -406,19 +413,19 @@ router.get("/audit",
 
       if (resource_type) {
         countParamCount++
-        countQuery += ` AND al.resource_type = $${countParamCount}`
+        countQuery += ` AND al.table_name = $${countParamCount}`
         countParams.push(resource_type)
       }
 
       if (start_date) {
         countParamCount++
-        countQuery += ` AND al.created_at >= $${countParamCount}`
+        countQuery += ` AND al.occurred_at >= $${countParamCount}`
         countParams.push(start_date)
       }
 
       if (end_date) {
         countParamCount++
-        countQuery += ` AND al.created_at <= $${countParamCount}`
+        countQuery += ` AND al.occurred_at <= $${countParamCount}`
         countParams.push(end_date)
       }
 

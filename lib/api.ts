@@ -15,6 +15,19 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
 }
 
 // Types
+
+/** ADR-012 Action Item 7: matches server's CapabilityRegistryFullRow shape exactly (server/src/modules/capabilityRegistry/CapabilityRegistryRepository.ts). */
+export interface CapabilityRegistryListItem {
+  id: string
+  moduleId: string
+  portfolioId: string
+  platformOperator: string
+  functionalOwnerType: string
+  functionalOwnerDepartment: string | null
+  controlDefinitionOwnerDepartment: string | null
+  activationStatus: string
+}
+
 export interface User {
   id: string
   email: string
@@ -1569,6 +1582,11 @@ export class ApiClient {
 
   async getSecurityMetrics() {
     return this.request<any>("/security/metrics")
+  }
+
+  // Capability Register endpoints (ADR-012 Action Item 7 -- read-only discovery)
+  async getCapabilityRegistry() {
+    return this.request<{ capabilities: CapabilityRegistryListItem[] }>("/v1/capability-registry")
   }
 
   // Companies endpoints

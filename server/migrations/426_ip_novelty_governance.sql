@@ -64,6 +64,28 @@ CREATE INDEX IF NOT EXISTS idx_ip_claim_entities_entity_id ON ip_claim_entities(
 -- Only inserts if it doesn't already exist
 -- ============================================================================
 
+-- approval_workflows predates the workflow-routing engine that
+-- approvalWorkflowService.ts (ApprovalWorkflow interface) and this seed both
+-- require -- no migration ever added these columns, so add them here rather
+-- than assuming they exist. The original model was one-workflow-per-project
+-- (project_id NOT NULL); routing-engine workflows like this one are global,
+-- so project_id must become optional.
+ALTER TABLE approval_workflows ALTER COLUMN project_id DROP NOT NULL;
+
+ALTER TABLE approval_workflows
+  ADD COLUMN IF NOT EXISTS workflow_type          TEXT,
+  ADD COLUMN IF NOT EXISTS routing_rules          JSONB,
+  ADD COLUMN IF NOT EXISTS approval_stages        JSONB,
+  ADD COLUMN IF NOT EXISTS critical_sla_hours     INTEGER,
+  ADD COLUMN IF NOT EXISTS emergency_sla_hours    INTEGER,
+  ADD COLUMN IF NOT EXISTS escalation_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS escalation_after_hours INTEGER,
+  ADD COLUMN IF NOT EXISTS escalation_to          TEXT[],
+  ADD COLUMN IF NOT EXISTS notification_channels  TEXT[],
+  ADD COLUMN IF NOT EXISTS is_active              BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_approval_workflows_workflow_type ON approval_workflows(workflow_type);
+
 INSERT INTO approval_workflows (
   name,
   description,

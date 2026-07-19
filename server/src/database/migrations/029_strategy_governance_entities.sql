@@ -1,8 +1,10 @@
 -- Strategic Governance and Analysis Domain Entities
 
 -- Project Charter Details
-DROP TABLE IF EXISTS project_charter_details CASCADE;
-CREATE TABLE project_charter_details (
+-- (DROP TABLE removed: project_charter_details already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS project_charter_details (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   vision_statement TEXT,
@@ -20,8 +22,10 @@ CREATE TABLE project_charter_details (
 CREATE INDEX IF NOT EXISTS idx_charter_details_project_id ON project_charter_details(project_id);
 
 -- Business Case Details
-DROP TABLE IF EXISTS business_case_details CASCADE;
-CREATE TABLE business_case_details (
+-- (DROP TABLE removed: business_case_details already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS business_case_details (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   problem_statement TEXT,
@@ -39,8 +43,10 @@ CREATE TABLE business_case_details (
 CREATE INDEX IF NOT EXISTS idx_business_case_details_project_id ON business_case_details(project_id);
 
 -- Benefit Realization Plan
-DROP TABLE IF EXISTS benefit_realization_plan CASCADE;
-CREATE TABLE benefit_realization_plan (
+-- (DROP TABLE removed: benefit_realization_plan already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS benefit_realization_plan (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   benefit_description TEXT NOT NULL,
@@ -57,8 +63,10 @@ CREATE TABLE benefit_realization_plan (
 CREATE INDEX IF NOT EXISTS idx_benefit_realization_project_id ON benefit_realization_plan(project_id);
 
 -- General Change Requests (Beyond Scope)
-DROP TABLE IF EXISTS general_change_requests CASCADE;
-CREATE TABLE general_change_requests (
+-- (DROP TABLE removed: general_change_requests already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS general_change_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   request_id VARCHAR(50),
@@ -77,8 +85,10 @@ CREATE TABLE general_change_requests (
 CREATE INDEX IF NOT EXISTS idx_gen_change_requests_project_id ON general_change_requests(project_id);
 
 -- Project Team Evaluations
-DROP TABLE IF EXISTS project_team_evaluations CASCADE;
-CREATE TABLE project_team_evaluations (
+-- (DROP TABLE removed: project_team_evaluations already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS project_team_evaluations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   person_name VARCHAR(255),

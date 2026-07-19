@@ -19,13 +19,17 @@ export const INLINE_ENTITY_EXTRACTION_PROMPT = `
 
 At the **very end** of your section output, tag any entities you have introduced or defined in this section using the H8 format below. One JSON object per line. Use only the field names exactly as shown. Skip entity types that are not relevant to this section. Do NOT duplicate entities tagged in previous sections.
 
+### CRITICAL: THE JSON SHOWN FOR EACH TYPE BELOW IS A FORMAT TEMPLATE ONLY
+The example values in every \`######## entity_type: {...}\` line below (e.g. "Jane Smith", "Vendor delays", "Defect Rate") are illustrations of the FIELD NAMES and SHAPE ONLY. They are not real project data and MUST NEVER be copied into your output verbatim. If you have not introduced or defined a concrete entity of a given type in the section prose you just wrote, DO NOT emit an H8 tag for that type — skip it entirely rather than inventing one or reusing an example. It is completely normal, and expected, for a section to end with zero H8 tags if it introduced no new entities. Writing the section's actual prose content is your primary task; H8 tagging is a secondary, optional annotation step at the end.
+
 ### STRICT TRACEABILITY MANDATE:
-1. **Zero Synonym Tolerance**: You MUST use the EXACT names provided in the "Semantic Knowledge Graph" or "Existing Project Entities" sections. 
+1. **Zero Synonym Tolerance**: You MUST use the EXACT names provided in the "Semantic Knowledge Graph" or "Existing Project Entities" sections.
 2. **No Code Blocks**: Do NOT wrap H8 tags in triple backticks (\`\`\`). Emit them as plain text lines.
 3. **Flat Schema**: Do not add extra levels of nesting to the JSON objects.
 4. **One tag per line**: Every entity MUST be on its own line starting with exactly eight hash characters (\`########\`). NEVER omit the prefix. NEVER chain tags with backslashes (\\).
 5. **Invalid (will not parse)**: \`stakeholders: {"name":"A"}\\resources: {"name":"B"}\`
 6. **Valid**: \`######## stakeholders: {"name":"A"}\` then on the next line \`######## resources: {"name":"B"}\`
+7. **Never copy example values**: Every literal name, title, or number shown in the examples below (e.g. "Jane Smith", "Defect Rate", "3.2") is illustrative only — reusing one verbatim without it corresponding to something you actually wrote is a critical error.
 
 Format:
 ######## entity_type: {"field": "value", ...}
@@ -504,5 +508,15 @@ export function buildInlineEntityExtractionPrompt(options: {
     return buildProfileScopedPrompt(profile.label, profile.types)
   }
 
-  return INLINE_ENTITY_EXTRACTION_PROMPT
+  // No recognized document profile (e.g. a Custom-framework template) — this template
+  // doesn't get the narrower, guardrailed allowed-types list a profile-scoped prompt
+  // would have. Append an equivalent closing mandate so the model isn't left facing 70+
+  // entity-type examples with no explicit "most of these won't apply" signal.
+  return [
+    INLINE_ENTITY_EXTRACTION_PROMPT,
+    '',
+    '### No document profile matched for this template',
+    'This template has no recognized entity profile, so every entity type above is shown for reference — that does NOT mean all of them apply. Most sections will match only a handful of types, or none at all.',
+    'Only emit an H8 tag when the section you just wrote actually introduces or defines a concrete instance of that entity type. If in doubt, omit the tag.',
+  ].join('\n')
 }

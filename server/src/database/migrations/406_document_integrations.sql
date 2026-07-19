@@ -46,6 +46,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_document_integrations_updated_at ON document_integrations;
 
+DROP TRIGGER IF EXISTS trigger_document_integrations_updated_at ON document_integrations;
 CREATE TRIGGER trigger_document_integrations_updated_at
   BEFORE UPDATE ON document_integrations
   FOR EACH ROW

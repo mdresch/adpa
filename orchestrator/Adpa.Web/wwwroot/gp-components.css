@@ -1,0 +1,227 @@
+/*
+ * ADR-011 "Humanist" design system — component styles. Deliberately GLOBAL,
+ * not Blazor CSS isolation (.razor.css) — these classes are a shared
+ * vocabulary consumed both by Components/Shared/*.razor AND by raw HTML in
+ * places that must stay outside Blazor's interactive circuit (the nav's
+ * sign-out <form>, mirroring Login.razor's own reasoning for plain HTML
+ * forms). CSS isolation would scope a class to only the component that
+ * defines it, which breaks that reuse. Reads all colors from
+ * design-tokens.css's --gp-* custom properties, loaded first.
+ */
+
+/* ---------- StatusChip ---------- */
+.gp-chip {
+  font-family: var(--gp-font);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 999px;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.gp-chip-approved {
+  background: var(--gp-approve-bg);
+  color: var(--gp-approve-ink);
+}
+
+.gp-chip-pending {
+  background: var(--gp-pending-bg);
+  color: var(--gp-pending-ink);
+}
+
+.gp-chip-declined {
+  background: var(--gp-decline-bg);
+  color: var(--gp-decline-ink);
+}
+
+.gp-chip-neutral {
+  background: var(--gp-neutral-bg);
+  color: var(--gp-neutral-ink);
+}
+
+/* ---------- PillButton ---------- */
+.gp-btn {
+  font-family: var(--gp-font);
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.gp-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gp-btn-primary {
+  background: var(--gp-ink);
+  color: var(--gp-surface);
+}
+
+.gp-btn-secondary {
+  background: var(--gp-surface);
+  color: var(--gp-ink);
+  border: 1px solid var(--gp-border);
+}
+
+.gp-btn-approve {
+  background: var(--gp-approve);
+  color: #fff;
+}
+
+.gp-btn-deny {
+  background: var(--gp-surface);
+  color: var(--gp-decline);
+  border: 1px solid var(--gp-decline-bg);
+}
+
+/* ---------- GovernorCard ---------- */
+.gp-card-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.gp-card-frame.gp-bloom::before,
+.gp-card-frame.gp-bloom::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(38px);
+  opacity: 0.55;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.gp-card-frame.gp-bloom::before {
+  width: 220px;
+  height: 220px;
+  background: var(--gp-bloom-coral);
+  top: -70px;
+  right: -60px;
+}
+
+.gp-card-frame.gp-bloom::after {
+  width: 200px;
+  height: 200px;
+  background: var(--gp-bloom-sky);
+  bottom: -80px;
+  left: -50px;
+}
+
+.gp-card {
+  position: relative;
+  z-index: 1;
+  font-family: var(--gp-font);
+  color: var(--gp-ink);
+  background: var(--gp-surface);
+  border: 1px solid var(--gp-border);
+  border-radius: 20px;
+  box-shadow:
+    0 2px 4px rgba(60, 45, 30, 0.04),
+    0 16px 32px -20px rgba(60, 45, 30, 0.18);
+  padding: 22px 24px;
+}
+
+/* ---------- ReviewerStrip ---------- */
+.gp-reviewer-strip {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+/* ---------- JustificationBlock ---------- */
+.gp-justification {
+  font-family: var(--gp-font);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--gp-ink);
+  background: var(--gp-justification-bg);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin: 0;
+}
+
+/* ---------- MainLayout nav ---------- */
+.gp-shell {
+  min-height: 100vh;
+  background: var(--gp-bg);
+}
+
+.gp-nav {
+  background: var(--gp-surface);
+  border-bottom: 1px solid var(--gp-border);
+}
+
+.gp-nav-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.gp-brand {
+  font-family: var(--gp-font);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gp-ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.gp-brand span {
+  font-weight: 500;
+  color: var(--gp-soft);
+}
+
+.gp-nav-links {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.gp-nav-links a {
+  font-family: var(--gp-font);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--gp-soft);
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+
+.gp-nav-links a:hover {
+  background: var(--gp-neutral-bg);
+  color: var(--gp-ink);
+}
+
+.gp-nav-links a.active {
+  background: var(--gp-ink);
+  color: var(--gp-surface);
+}
+
+.gp-nav-user {
+  font-family: var(--gp-font);
+  font-size: 12.5px;
+  color: var(--gp-soft);
+}
+
+.gp-nav-form {
+  display: inline-block;
+}
+
+.gp-main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}

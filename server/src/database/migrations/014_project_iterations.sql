@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS project_iterations (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE project_iterations ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_project_iterations_project_id ON project_iterations(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_iterations_status ON project_iterations(status);
@@ -42,6 +45,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_project_iterations_updated_at ON project_iterations;
 CREATE TRIGGER trigger_update_project_iterations_updated_at
     BEFORE UPDATE ON project_iterations
     FOR EACH ROW

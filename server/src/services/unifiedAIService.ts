@@ -8,6 +8,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createMistral } from '@ai-sdk/mistral'
 import { createAzure } from '@ai-sdk/azure'
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOllama } from 'ollama-ai-provider-v2'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
@@ -24,7 +25,7 @@ const langfuse = new Langfuse({
 export interface AIProvider {
   id: string
   name: string
-  type: 'openai' | 'google' | 'mistral' | 'azure' | 'ollama' | 'foundry-local'
+  type: 'openai' | 'google' | 'mistral' | 'azure' | 'anthropic' | 'ollama' | 'foundry-local'
   apiKey: string
   baseURL?: string
   isActive: boolean
@@ -162,6 +163,8 @@ class UnifiedAIService {
         return createMistral(config)
       case 'azure':
         return createAzure(config)
+      case 'anthropic':
+        return createAnthropic(config)
       case 'ollama': {
         const ollamaBaseUrl = provider.baseURL || provider.configuration?.endpoint || 'http://localhost:11434'
         const baseURL = ollamaBaseUrl.endsWith('/api') ? ollamaBaseUrl : `${ollamaBaseUrl}/api`

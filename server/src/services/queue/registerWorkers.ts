@@ -16,7 +16,7 @@ import {
   digitalTwinTriggerQueue,
   gkgSyncQueue,
   semanticProcessingQueue,
-  QUEUE_PREFETCH,
+  departmentClaimsSyncQueue,
   WORKER_ID,
   updateJobStatus,
   getQueueServiceDependencies
@@ -55,23 +55,62 @@ export async function registerWorkers(): Promise<void> {
   logger.info(`[QUEUE] Initializing queue processors on worker ID: ${WORKER_ID}...`)
 
   // AI Generation Processor
-  aiQueue.process("ai-generate", QUEUE_PREFETCH, async (job) => {
+  aiQueue.process("ai-generate", 1, async (job) => {
     logger.info(`[WORKER] AI generation worker ${WORKER_ID} picked up job: ${job.id}`)
+    const actualJobId = (job.data as any)?.jobId || job.id.toString()
+
+    // A delivered queue message (broker redelivery after a dropped connection, or an
+    // orphan-recovery republish) doesn't reflect a manual DB-level cancellation made
+    // while the job was in flight — check current status before doing any work so a
+    // resolved job can't be revived and have its status overwritten.
+    const statusRes = await safeQuery(pool, `SELECT status FROM jobs WHERE id = $1`, [actualJobId])
+    const currentStatus = statusRes?.rows?.[0]?.status
+    if (currentStatus && ['cancelled', 'failed', 'completed'].includes(currentStatus)) {
+      logger.warn(`[WORKER] Skipping ai-generate job ${actualJobId}: already resolved (status=${currentStatus})`)
+      return { skipped: true, reason: `job already ${currentStatus}` }
+    }
+
     const { AIGenerationJobService } = await import("../jobs/AIGenerationJobService")
     const deps = await getQueueServiceDependencies()
-    const actualJobId = (job.data as any)?.jobId || job.id.toString()
     logger.info(`[WORKER] Processing AI generation job with ID: ${actualJobId} using worker: ${WORKER_ID}`)
-    return await AIGenerationJobService.processJob(job as any, {
-      workerId: WORKER_ID,
-      updateJobStatus,
-      dependencies: deps,
-    }, deps)
+
+    const timeoutMinutes = Number(process.env.AI_GENERATE_JOB_TIMEOUT_MINUTES) || 15
+    const timeoutMs = timeoutMinutes * 60 * 1000
+    return await Promise.race([
+      AIGenerationJobService.processJob(job as any, {
+        workerId: WORKER_ID,
+        updateJobStatus,
+        dependencies: deps,
+      }, deps),
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          // Rejecting here does not stop the still-running processJob() call above —
+          // Promise.race can't cancel its loser. Cancelling through the real
+          // cancelJob() path (rather than a raw status='failed' UPDATE) is what
+          // makes this terminal: updateJobStatus() refuses to write over a
+          // cancelled job, so the orphaned call's later heartbeats/completion
+          // writes can no longer resurrect it, and the owned document (if any)
+          // is cancelled too instead of being left as a stale empty draft.
+          Promise.resolve()
+            .then(async () => {
+              const { cancelJob } = await import("./queueClient")
+              await cancelJob(actualJobId, `Cancelled: exceeded ${timeoutMinutes}-minute processing limit.`)
+            })
+            .catch((cancelErr) => {
+              logger.error(`[WORKER] Failed to cancel timed-out job ${actualJobId}`, cancelErr)
+            })
+            .finally(() => {
+              reject(new Error(`ai-generate job ${actualJobId} exceeded ${timeoutMinutes}-minute timeout`))
+            })
+        }, timeoutMs)
+      }),
+    ])
   })
 
   logger.info(`[QUEUE] Registered ai-generate processor on aiQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 
   // Save Inline Entities Processor
-  aiQueue.process("save-inline-entities", QUEUE_PREFETCH, async (job) => {
+  aiQueue.process("save-inline-entities", 1, async (job) => {
     const { SaveInlineEntitiesJobService } = await import("../jobs/SaveInlineEntitiesJobService")
     const deps = await getQueueServiceDependencies()
     return await SaveInlineEntitiesJobService.processJob(job as any, {
@@ -85,7 +124,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Document Convert Processor
   import("../jobs/DocumentConversionJobService").then(({ DocumentConversionJobService }) => {
-    documentQueue.process("document-convert", QUEUE_PREFETCH, async (job) => {
+    documentQueue.process("document-convert", 1, async (job) => {
       const deps = await getQueueServiceDependencies()
       return await DocumentConversionJobService.processJob(job as any, {
         workerId: WORKER_ID,
@@ -97,7 +136,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Document Upload Processor
   import("../documentUploadService").then(({ processUploadedFile }) => {
-    documentUploadQueue.process("file-process", QUEUE_PREFETCH, async (job) => {
+    documentUploadQueue.process("file-process", 1, async (job) => {
       logger.info(`[WORKER] document-upload worker ${WORKER_ID} picked up job: ${job.id}`)
       try {
         return await processUploadedFile(job as any)
@@ -111,7 +150,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Baseline Extraction Processor
   import("../jobs/BaselineExtractionJobService").then(({ BaselineExtractionJobService }) => {
-    baselineQueue.process("baseline-extract", QUEUE_PREFETCH, async (job) => {
+    baselineQueue.process("baseline-extract", 1, async (job) => {
       const deps = await getQueueServiceDependencies()
       return await BaselineExtractionJobService.processJob(job as any, {
         workerId: WORKER_ID,
@@ -122,7 +161,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Process Flow Processor
-  processFlowQueue.process("process-flow", QUEUE_PREFETCH, async (job) => {
+  processFlowQueue.process("process-flow", 1, async (job) => {
     const { jobId, userId, config } = job.data as any
     let dbPool = pool
     try {
@@ -267,7 +306,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Document Regeneration Processor
-  regenerationQueue.process("document-regeneration", QUEUE_PREFETCH, async (job) => {
+  regenerationQueue.process("document-regeneration", 1, async (job) => {
     const { jobId, documentId, templateId, provider, model, versionType, temperature, userId } = job.data as any
     try {
       await updateJobStatus(jobId, "processing", 10, WORKER_ID, "document-regeneration")
@@ -285,7 +324,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Confluence Publishing Processor
-  confluenceQueue.process("publish-to-confluence", QUEUE_PREFETCH, async (job) => {
+  confluenceQueue.process("publish-to-confluence", 1, async (job) => {
     try {
       const { PublishToConfluenceJobService } = await import("../jobs/PublishToConfluenceJobService")
       return await PublishToConfluenceJobService.processJob(job as any)
@@ -296,7 +335,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Quality Audit Processor
-  qualityAuditQueue.process("quality-audit", QUEUE_PREFETCH, async (job) => {
+  qualityAuditQueue.process("quality-audit", 1, async (job) => {
     const { jobId, documentId, documentContent, documentType, projectContext, userId } = job.data as any
     try {
       await updateJobStatus(jobId, "processing", 10, WORKER_ID, "quality-audit")
@@ -314,7 +353,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Project Data Extraction Parent Processor
-  extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
+  extractionQueue.process("extract-project-data", 1, async (job) => {
     const { ExtractionOrchestrationService } = await import("../jobs/ExtractionOrchestrationService")
     const deps = await getQueueServiceDependencies()
     return await ExtractionOrchestrationService.processJob(job as any, { workerId: WORKER_ID, updateJobStatus }, deps)
@@ -344,7 +383,7 @@ export async function registerWorkers(): Promise<void> {
       ] as const
 
       ENTITY_TYPES.forEach((entityType) => {
-        extractionQueue.process(`extract-entity-${entityType}`, QUEUE_PREFETCH, async (job) => {
+        extractionQueue.process(`extract-entity-${entityType}`, 1, async (job) => {
           const {
             parentJobId,
             projectId,
@@ -410,7 +449,7 @@ export async function registerWorkers(): Promise<void> {
   // Digital Twin Event Processing
   if (process.env.NODE_ENV !== 'test') {
     import("../digitalTwinEventService").then(({ processEvent }) => {
-      digitalTwinEventQueue.process("process-event", QUEUE_PREFETCH, async (job) => {
+      digitalTwinEventQueue.process("process-event", 1, async (job) => {
         const { eventId } = job.data as { eventId: string }
         logger.info(`[WORKER] Digital Twin event worker ${WORKER_ID} processing event: ${eventId}`)
         try {
@@ -429,7 +468,7 @@ export async function registerWorkers(): Promise<void> {
   // Digital Twin Document Trigger Processing
   if (process.env.NODE_ENV !== 'test') {
     import("../digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
-      digitalTwinTriggerQueue.process("process-trigger", QUEUE_PREFETCH, async (job) => {
+      digitalTwinTriggerQueue.process("process-trigger", 1, async (job) => {
         const { triggerId } = job.data as { triggerId: string }
         logger.info(`[WORKER] Digital Twin trigger worker ${WORKER_ID} processing trigger: ${triggerId}`)
         try {
@@ -454,7 +493,7 @@ export async function registerWorkers(): Promise<void> {
         const { getDatabasePool } = require("../../database/connection")
         const { runBootstrap, runSyncProject, runSyncDocument, runGkgFullReconciliation } = require("../gkg")
 
-        gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
+        gkgSyncQueue.process("gkg-bootstrap", 1, async (job) => {
           console.log("[GKG] Processing gkg-bootstrap")
           try {
             const driver = getNeo4jDriver()
@@ -471,7 +510,7 @@ export async function registerWorkers(): Promise<void> {
           }
         })
 
-        gkgSyncQueue.process("gkg-sync-project", QUEUE_PREFETCH, async (job) => {
+        gkgSyncQueue.process("gkg-sync-project", 1, async (job) => {
           const { projectId } = (job.data as { projectId?: string }) ?? {}
           if (!projectId) throw new Error("gkg-sync-project: projectId required")
           console.log("[GKG] Processing gkg-sync-project", { projectId })
@@ -491,7 +530,7 @@ export async function registerWorkers(): Promise<void> {
           }
         })
 
-        gkgSyncQueue.process("gkg-sync-document", QUEUE_PREFETCH, async (job) => {
+        gkgSyncQueue.process("gkg-sync-document", 1, async (job) => {
           const { documentId } = (job.data as { documentId?: string }) ?? {}
           if (!documentId) throw new Error("gkg-sync-document: documentId required")
           console.log("[GKG] Processing gkg-sync-document", { documentId })
@@ -511,7 +550,7 @@ export async function registerWorkers(): Promise<void> {
           }
         })
 
-        gkgSyncQueue.process("gkg-reconcile", QUEUE_PREFETCH, async (job) => {
+        gkgSyncQueue.process("gkg-reconcile", 1, async (job) => {
           const { cleanup, batchSize } =
             (job.data as { cleanup?: boolean; batchSize?: number }) ?? {}
           console.log("[GKG] Processing gkg-reconcile", {
@@ -559,7 +598,7 @@ export async function registerWorkers(): Promise<void> {
         console.log("[SEMANTIC] Registering semantic processing processors...")
         const { processSemanticDocument, processSemanticBatch } = require("../jobs/SemanticProcessingJobService")
 
-        semanticProcessingQueue.process("semantic-process-document", QUEUE_PREFETCH, async (job) => {
+        semanticProcessingQueue.process("semantic-process-document", 1, async (job) => {
           logger.info(`[WORKER] semantic-processing worker ${WORKER_ID} picked up document job: ${job.id}`)
           try {
             return await processSemanticDocument(job as any)
@@ -569,7 +608,7 @@ export async function registerWorkers(): Promise<void> {
           }
         })
 
-        semanticProcessingQueue.process("semantic-process-batch", QUEUE_PREFETCH, async (job) => {
+        semanticProcessingQueue.process("semantic-process-batch", 1, async (job) => {
           logger.info(`[WORKER] semantic-processing worker ${WORKER_ID} picked up batch job: ${job.id}`)
           try {
             return await processSemanticBatch(job as any)
@@ -588,4 +627,31 @@ export async function registerWorkers(): Promise<void> {
       }
     })()
   }
+
+  // Department Claims Sync Processor (ADR-005 Phase 0) — dual-write-safe Firebase
+  // custom-claims sync. enqueueClaimsSyncJob only ever persists a DB row + hands off
+  // to this queue; processClaimsSyncJob marks the row complete only after a successful
+  // Firebase Admin call, leaving it retryable (RabbitMQ redelivery per the queue's
+  // configured attempts/backoff) on failure.
+  departmentClaimsSyncQueue.process("department-claims-sync", 1, async (job) => {
+    const { jobId, userId, claims, isRemoval } = job.data as any
+    try {
+      const { processClaimsSyncJob } = await import("../../modules/departments/departmentClaimsSyncJob")
+      const { firebaseClaimsAdmin } = await import("../../modules/departments/firebaseClaimsAdmin")
+      const { createClaimsSyncQueueAdapter } = await import("../../modules/departments/claimsSyncQueueAdapter")
+      await processClaimsSyncJob(
+        {
+          db: { query: (sql: string, params?: any[]) => pool.query(sql, params) },
+          queue: createClaimsSyncQueueAdapter(departmentClaimsSyncQueue),
+          firebaseAdmin: firebaseClaimsAdmin
+        },
+        { id: String(jobId), userId, claims, isRemoval }
+      )
+      logger.info(`[DEPARTMENT-CLAIMS-SYNC] Job completed: ${jobId}`)
+      return { success: true, jobId }
+    } catch (error) {
+      logger.error(error, `[DEPARTMENT-CLAIMS-SYNC] Job failed: ${jobId}`)
+      throw error
+    }
+  })
 }

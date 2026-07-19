@@ -4,8 +4,9 @@ import { aiService } from '../../services/aiService';
 import { pool } from '../../database/connection';
 import { notificationService } from '../../services/notificationService';
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'generated-uuid'),
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'generated-uuid'),
 }));
 
 jest.mock('../../database/connection', () => ({
@@ -90,6 +91,12 @@ describe('Document Generation E2E Pipeline', () => {
       }
       if (queryText.includes('FROM template_paragraphs') || queryText.includes('template_paragraphs WHERE')) {
         return Promise.resolve({ rows: [{ id: 'para-1', template_id: 'tmpl-xyz', order: 1, section_name: 'Summary', section_type: 'SUMMARY', required: true }], rowCount: 1 });
+      }
+      // Concurrency claim guard (AIGenerationJobService.processJob): must succeed
+      // so this test exercises the real pipeline rather than hitting the
+      // "already claimed by another live invocation" skip path.
+      if (queryText.includes('UPDATE jobs') && queryText.includes('processing_started_at = CURRENT_TIMESTAMP') && queryText.includes('RETURNING id')) {
+        return Promise.resolve({ rows: [{ id: 'job-123' }], rowCount: 1 });
       }
       return Promise.resolve({ rows: [], rowCount: 0 });
     });

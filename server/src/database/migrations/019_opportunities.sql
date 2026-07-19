@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS opportunities (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_opportunities_project_id ON opportunities(project_id);
 CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
@@ -39,6 +42,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_opportunities_updated_at ON opportunities;
 CREATE TRIGGER trigger_update_opportunities_updated_at
     BEFORE UPDATE ON opportunities
     FOR EACH ROW

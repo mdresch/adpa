@@ -17,7 +17,7 @@ import {
   JobDatabaseError,
   StuckJobsError,
 } from '../errors'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import { PerformanceMonitor } from '../../../utils/performanceMonitor'
 
 /**
@@ -89,7 +89,7 @@ export class QueueService {
       )
     }
 
-    const jobId = validatedData.jobId || options?.jobId || uuidv4()
+    const jobId = validatedData.jobId || options?.jobId || randomUUID()
     let queueName: QueueName
     let queue: IQueue | undefined
 
@@ -606,8 +606,13 @@ export class QueueService {
 
       values.push(jobId)
 
+      // A job that has been cancelled is a terminal state. Without this guard, an
+      // orphaned/still-running generation attempt (e.g. one whose owning job was
+      // cancelled by the 15-minute ai-generate timeout, which cannot actually stop
+      // the in-flight call) can write its next heartbeat or completion status here
+      // and silently resurrect the job back to 'processing'/'completed'/'failed'.
       await this.dependencies.database.query(
-        `UPDATE jobs SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        `UPDATE jobs SET ${updates.join(', ')} WHERE id = $${paramIndex} AND status != 'cancelled'`,
         values
       )
     } catch (error) {
@@ -622,16 +627,38 @@ export class QueueService {
   }
 
   /**
-   * Cancel a job
+   * Cancel a job and cascade the cancellation to the document it owns, if any.
+   *
+   * The UPDATE is itself guarded to only apply to a job still in flight
+   * ('pending'/'processing') so a cancel can never re-fire on (or race) a job
+   * that already reached a real terminal state on its own. When it does apply,
+   * `data.documentId` (set on ai-generate jobs) identifies the document created
+   * for this generation — it is marked 'cancelled' too, rather than being left
+   * as a stale empty draft or a 'failed' row that a zombie retry could later
+   * resurrect.
    */
-  async cancelJob(jobId: string): Promise<void> {
+  async cancelJob(jobId: string, reason?: string): Promise<void> {
     const endTiming = PerformanceMonitor.start('QueueService.cancelJob')
     try {
-      // Update database
-      await this.dependencies.database.query(
-        "UPDATE jobs SET status = 'cancelled' WHERE id = $1",
-        [jobId]
+      const result = await this.dependencies.database.query(
+        `UPDATE jobs
+         SET status = 'cancelled',
+             error_message = COALESCE($2, error_message),
+             completed_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND status NOT IN ('cancelled', 'completed', 'failed')
+         RETURNING data`,
+        [jobId, reason ?? null]
       )
+
+      const documentId = result?.rows?.[0]?.data?.documentId
+      if (documentId) {
+        await this.dependencies.database.query(
+          `UPDATE documents
+           SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1 AND status NOT IN ('completed', 'approved')`,
+          [documentId]
+        )
+      }
 
       // Try to remove from all queues
       for (const [queueName, queue] of this.queues) {

@@ -1,8 +1,10 @@
 -- Risk Extensions and Issue Domain Entities
 
 -- Risk Appetite
-DROP TABLE IF EXISTS risk_appetite CASCADE;
-CREATE TABLE risk_appetite (
+-- (DROP TABLE removed: risk_appetite already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS risk_appetite (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   category VARCHAR(100), -- 'Financial', 'Schedule', 'Quality', 'Safety'
@@ -18,8 +20,10 @@ CREATE TABLE risk_appetite (
 CREATE INDEX IF NOT EXISTS idx_risk_appetite_project_id ON risk_appetite(project_id);
 
 -- Risk Checklists
-DROP TABLE IF EXISTS risk_checklists CASCADE;
-CREATE TABLE risk_checklists (
+-- (DROP TABLE removed: risk_checklists already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS risk_checklists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   category VARCHAR(100),
@@ -35,8 +39,10 @@ CREATE TABLE risk_checklists (
 CREATE INDEX IF NOT EXISTS idx_risk_checklists_project_id ON risk_checklists(project_id);
 
 -- Probability Impact Matrix
-DROP TABLE IF EXISTS probability_impact_matrix CASCADE;
-CREATE TABLE probability_impact_matrix (
+-- (DROP TABLE removed: probability_impact_matrix already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS probability_impact_matrix (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   probability_level VARCHAR(50),
@@ -52,8 +58,10 @@ CREATE TABLE probability_impact_matrix (
 CREATE INDEX IF NOT EXISTS idx_prob_impact_matrix_project_id ON probability_impact_matrix(project_id);
 
 -- Issue Log
-DROP TABLE IF EXISTS issue_log CASCADE;
-CREATE TABLE issue_log (
+-- (DROP TABLE removed: issue_log already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS issue_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   issue_id VARCHAR(50),
@@ -75,8 +83,10 @@ CREATE TABLE issue_log (
 CREATE INDEX IF NOT EXISTS idx_issue_log_project_id ON issue_log(project_id);
 
 -- Lessons Learned
-DROP TABLE IF EXISTS lessons_learned CASCADE;
-CREATE TABLE lessons_learned (
+-- (DROP TABLE removed: lessons_learned already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS lessons_learned (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   category VARCHAR(100),

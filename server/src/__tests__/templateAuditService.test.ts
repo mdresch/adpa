@@ -2,8 +2,9 @@ import { templateAuditService } from '../services/templateAuditService'
 import { pool } from '../database/connection'
 import { aiService } from '../services/aiService'
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-123')
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'mock-uuid-123')
 }))
 
 jest.mock('../database/connection', () => ({
@@ -18,8 +19,9 @@ jest.mock('../services/aiService', () => ({
   }
 }))
 
-jest.mock('uuid', () => ({
-  v4: jest.fn().mockReturnValue('mocked-uuid-v4')
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn().mockReturnValue('mocked-uuid-v4')
 }))
 
 describe('TemplateAuditService', () => {

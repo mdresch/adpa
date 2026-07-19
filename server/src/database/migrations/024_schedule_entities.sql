@@ -1,8 +1,10 @@
 -- Schedule Domain Entities
 
 -- Schedule Baseline
-DROP TABLE IF EXISTS schedule_baseline CASCADE;
-CREATE TABLE schedule_baseline (
+-- (DROP TABLE removed: schedule_baseline already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS schedule_baseline (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   start_date TIMESTAMP WITH TIME ZONE,
@@ -21,8 +23,10 @@ CREATE TABLE schedule_baseline (
 CREATE INDEX IF NOT EXISTS idx_schedule_baseline_project_id ON schedule_baseline(project_id);
 
 -- Schedule Activities
-DROP TABLE IF EXISTS schedule_activities CASCADE;
-CREATE TABLE schedule_activities (
+-- (DROP TABLE removed: schedule_activities already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS schedule_activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   activity_id VARCHAR(50),
@@ -46,8 +50,10 @@ CREATE TABLE schedule_activities (
 CREATE INDEX IF NOT EXISTS idx_schedule_activities_project_id ON schedule_activities(project_id);
 
 -- Critical Path
-DROP TABLE IF EXISTS critical_path CASCADE;
-CREATE TABLE critical_path (
+-- (DROP TABLE removed: critical_path already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS critical_path (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   path_description TEXT,
@@ -64,8 +70,10 @@ CREATE TABLE critical_path (
 CREATE INDEX IF NOT EXISTS idx_critical_path_project_id ON critical_path(project_id);
 
 -- Schedule Variances
-DROP TABLE IF EXISTS schedule_variances CASCADE;
-CREATE TABLE schedule_variances (
+-- (DROP TABLE removed: schedule_variances already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS schedule_variances (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   report_date TIMESTAMP WITH TIME ZONE,
@@ -82,8 +90,10 @@ CREATE TABLE schedule_variances (
 CREATE INDEX IF NOT EXISTS idx_schedule_variances_project_id ON schedule_variances(project_id);
 
 -- Schedule Forecasts
-DROP TABLE IF EXISTS schedule_forecasts CASCADE;
-CREATE TABLE schedule_forecasts (
+-- (DROP TABLE removed: schedule_forecasts already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS schedule_forecasts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   forecast_date TIMESTAMP WITH TIME ZONE,

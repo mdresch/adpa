@@ -19,4 +19,4 @@ cmds = [
 ]
 
 [start]
-cmd = "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '') && pnpm start"
+cmd = "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '') && NODE_OPTIONS=--max-old-space-size=384 pnpm run start:api"

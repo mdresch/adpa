@@ -8,7 +8,7 @@ ADPA is a full-stack platform for AI-assisted document processing, governance wo
 
 - Frontend: Next.js (App Router) in repo root (`app/`, `components/`, `lib/`).
 - Backend: Express + TypeScript in `server/` (`server/src/routes`, `server/src/services`).
-- Data and infra: PostgreSQL (Supabase), Redis queues, optional Neo4j/vector services.
+- Data and infra: PostgreSQL (Azure Database for PostgreSQL Flexible Server), Redis queues, optional Neo4j/vector services.
 - Realtime: Socket.IO and queue/worker status monitoring.
 
 ## 2. Source of truth files

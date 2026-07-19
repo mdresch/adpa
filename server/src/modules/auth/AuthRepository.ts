@@ -1,4 +1,5 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
+import { randomUUID } from 'crypto';
 import { pool } from '../../database/connection';
 
 export interface UserData {
@@ -21,6 +22,7 @@ export interface CompanyData {
   name: string;
   domain?: string | null;
   is_active?: boolean;
+  created_by?: string | null;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -86,29 +88,33 @@ export class AuthRepository {
    * Creates a new user with fallback for missing columns.
    */
   async createUser(data: Partial<UserData>, client: Pool | PoolClient = this.db): Promise<QueryResult<any>> {
+    // Generated client-side (rather than left to the DB default) so a caller that needs to
+    // know the id ahead of commit — e.g. registration setting a new company's created_by —
+    // can pass it in. See REQ-DEPT-006/007's circular-FK note in AuthController.register.
+    const id = data.id || randomUUID();
     try {
       return await client.query(
-        `INSERT INTO users (email, password_hash, name, role, permissions, metadata, company_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+        `INSERT INTO users (id, email, password_hash, name, role, permissions, metadata, company_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, email, name, role, permissions, created_at, company_id, metadata`,
-        [data.email, data.password_hash, data.name, data.role, data.permissions, data.metadata, data.company_id]
+        [id, data.email, data.password_hash, data.name, data.role, data.permissions, data.metadata, data.company_id]
       );
     } catch (err: any) {
       if (err.message?.includes('column "metadata"') || err.message?.includes('column "company_id"') || err.code === '42703') {
         try {
           return await client.query(
-            `INSERT INTO users (email, password_hash, name, role, permissions, company_id) 
-             VALUES ($1, $2, $3, $4, $5, $6) 
+            `INSERT INTO users (id, email, password_hash, name, role, permissions, company_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING id, email, name, role, permissions, created_at, company_id`,
-            [data.email, data.password_hash, data.name, data.role, data.permissions, data.company_id]
+            [id, data.email, data.password_hash, data.name, data.role, data.permissions, data.company_id]
           );
         } catch (err2: any) {
           if (err2.message?.includes('column "company_id"') || err2.code === '42703') {
             return await client.query(
-              `INSERT INTO users (email, password_hash, name, role, permissions) 
-               VALUES ($1, $2, $3, $4, $5) 
+              `INSERT INTO users (id, email, password_hash, name, role, permissions)
+               VALUES ($1, $2, $3, $4, $5, $6)
                RETURNING id, email, name, role, permissions, created_at`,
-              [data.email, data.password_hash, data.name, data.role, data.permissions]
+              [id, data.email, data.password_hash, data.name, data.role, data.permissions]
             );
           }
           throw err2;
@@ -133,10 +139,23 @@ export class AuthRepository {
    */
   async createCompany(data: CompanyData, client: Pool | PoolClient = this.db): Promise<QueryResult<any>> {
     return client.query(
-      `INSERT INTO companies (id, name, domain, is_active, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `INSERT INTO companies (id, name, domain, is_active, created_by, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING id`,
-      [data.id, data.name, data.domain, true]
+      [data.id, data.name, data.domain, true, data.created_by ?? null]
+    );
+  }
+
+  /**
+   * Sets a company's created_by after the fact. Needed because companies.created_by
+   * references users(id) while users.company_id references companies(id) — a circular
+   * FK that no single insert order can satisfy. Callers insert the company (created_by
+   * NULL), then the user, then call this to back-fill created_by within the same transaction.
+   */
+  async setCompanyCreatedBy(companyId: string, userId: string, client: Pool | PoolClient = this.db): Promise<void> {
+    await client.query(
+      `UPDATE companies SET created_by = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [userId, companyId]
     );
   }
 

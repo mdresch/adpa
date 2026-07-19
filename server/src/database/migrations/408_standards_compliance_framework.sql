@@ -310,25 +310,30 @@ $$ LANGUAGE plpgsql;
 
 -- Triggers for updated_at
 DROP TRIGGER IF EXISTS update_standards_packs_updated_at ON standards_packs;
+DROP TRIGGER IF EXISTS update_standards_packs_updated_at ON standards_packs;
 CREATE TRIGGER update_standards_packs_updated_at
   BEFORE UPDATE ON standards_packs
   FOR EACH ROW EXECUTE FUNCTION update_compliance_updated_at();
 
+DROP TRIGGER IF EXISTS update_standards_categories_updated_at ON standards_categories;
 DROP TRIGGER IF EXISTS update_standards_categories_updated_at ON standards_categories;
 CREATE TRIGGER update_standards_categories_updated_at
   BEFORE UPDATE ON standards_categories
   FOR EACH ROW EXECUTE FUNCTION update_compliance_updated_at();
 
 DROP TRIGGER IF EXISTS update_compliance_rules_updated_at ON compliance_rules;
+DROP TRIGGER IF EXISTS update_compliance_rules_updated_at ON compliance_rules;
 CREATE TRIGGER update_compliance_rules_updated_at
   BEFORE UPDATE ON compliance_rules
   FOR EACH ROW EXECUTE FUNCTION update_compliance_updated_at();
 
 DROP TRIGGER IF EXISTS update_compliance_validation_results_updated_at ON compliance_validation_results;
+DROP TRIGGER IF EXISTS update_compliance_validation_results_updated_at ON compliance_validation_results;
 CREATE TRIGGER update_compliance_validation_results_updated_at
   BEFORE UPDATE ON compliance_validation_results
   FOR EACH ROW EXECUTE FUNCTION update_compliance_updated_at();
 
+DROP TRIGGER IF EXISTS update_compliance_recommendations_updated_at ON compliance_recommendations;
 DROP TRIGGER IF EXISTS update_compliance_recommendations_updated_at ON compliance_recommendations;
 CREATE TRIGGER update_compliance_recommendations_updated_at
   BEFORE UPDATE ON compliance_recommendations

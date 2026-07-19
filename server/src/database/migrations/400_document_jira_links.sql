@@ -20,6 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_document_jira_links_project_id ON document_jira_l
 CREATE INDEX IF NOT EXISTS idx_document_jira_links_jira_issue_key ON document_jira_links(jira_issue_key);
 
 -- Create trigger to automatically update updated_at timestamp
+DROP TRIGGER IF EXISTS update_document_jira_links_updated_at ON document_jira_links;
 CREATE TRIGGER update_document_jira_links_updated_at
     BEFORE UPDATE ON document_jira_links
     FOR EACH ROW

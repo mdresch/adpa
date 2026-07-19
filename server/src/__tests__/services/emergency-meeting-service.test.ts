@@ -7,7 +7,7 @@
 
 import { emergencyMeetingService } from '../../services/emergencyMeetingService'
 import { pool } from '../../database/connection'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 describe('Emergency Meeting Service', () => {
   let testProjectId: string

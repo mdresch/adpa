@@ -216,6 +216,15 @@ export interface GkgReconcileJobData extends BaseJobData {
 }
 
 /**
+ * Department Claims Sync Job Data (ADR-005 Phase 0)
+ */
+export interface DepartmentClaimsSyncJobData extends BaseJobData {
+  userId: string
+  claims: Array<{ portfolioId: string; department: string; role: string }>
+  isRemoval: boolean
+}
+
+/**
  * Union type for all job data types
  */
 export type JobData =
@@ -230,6 +239,7 @@ export type JobData =
   | PipelineProcessingJobData
   | PublishToConfluenceJobData
   | GkgReconcileJobData
+  | DepartmentClaimsSyncJobData
 
 /**
  * Bull Queue Job Options
@@ -301,6 +311,10 @@ export function isQualityAuditJobData(data: JobData): data is QualityAuditJobDat
 
 export function isPipelineProcessingJobData(data: JobData): data is PipelineProcessingJobData {
   return 'requestId' in data && 'templateId' in data && 'projectId' in data
+}
+
+export function isDepartmentClaimsSyncJobData(data: JobData): data is DepartmentClaimsSyncJobData {
+  return 'claims' in data && 'isRemoval' in data
 }
 
 export function isPublishToConfluenceJobData(data: JobData): data is PublishToConfluenceJobData {

@@ -1,15 +1,12 @@
 const { Pool } = require('pg');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-const { createClient } = require('@supabase/supabase-js');
 
 async function verifyRagFlow() {
     const pool = new Pool({
         connectionString: process.env.DATABASE_URL,
         ssl: { rejectUnauthorized: false }
     });
-
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     try {
         console.log('🧪 Verifying RAG Flow...');
@@ -29,7 +26,7 @@ async function verifyRagFlow() {
         // 1. Insert Test Document
         const testDoc = {
             name: 'Vector Bucket Test Doc',
-            content: 'Supabase Vector Buckets are a great way to store embeddings directly in storage without managing a separate pgvector table. Voyage AI provides high-quality embeddings for this purpose.',
+            content: 'Voyage AI provides high-quality embeddings for RAG, stored as pgvector columns directly on the documents table.',
             metadata: { source: 'verification-script' },
             domain_metrics: {},
             inferred_secondary_domains: [],

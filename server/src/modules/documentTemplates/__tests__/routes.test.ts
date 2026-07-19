@@ -11,8 +11,9 @@ import { pool } from '../../../database/connection'
 
 // Mock dependencies
 jest.mock('../service')
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-123')
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'mock-uuid-123')
 }))
 jest.mock('../../../database/connection', () => ({
   pool: {

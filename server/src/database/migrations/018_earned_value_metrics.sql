@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS earned_value_metrics (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE earned_value_metrics ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_earned_value_metrics_project_id ON earned_value_metrics(project_id);
 CREATE INDEX IF NOT EXISTS idx_earned_value_metrics_measurement_date ON earned_value_metrics(measurement_date);
@@ -40,6 +43,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_earned_value_metrics_updated_at ON earned_value_metrics;
 CREATE TRIGGER trigger_update_earned_value_metrics_updated_at
     BEFORE UPDATE ON earned_value_metrics
     FOR EACH ROW

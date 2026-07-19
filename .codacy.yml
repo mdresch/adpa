@@ -31,6 +31,7 @@ exclude_paths:
   # Test files
   - '**/__tests__/**'
   - '**/*.test.ts'
+  - '**/*.test.tsx'
   - '**/*.test.js'
   # Generated files and documentation
   - 'generated-documents/**'
@@ -45,7 +46,14 @@ exclude_paths:
   # Legacy and backup files
   - 'legacy/**'
   - 'backups/**'
-  - '*.sql'
+  - '**/*.sql'
+  # Isolated, single-purpose files whose entire content is a documented,
+  # intentional false positive (internal-only dev URLs; test-only TLS
+  # override; a mock ID generator) -- narrower than excluding the real
+  # source files (Program.cs, integration-setup.js) that call them.
+  - 'orchestrator/Adpa.Orchestrator/Clients/CapabilityRegistryUrlResolver.cs'
+  - 'server/tests/setup/allowInsecureTestDbTls.js'
+  - 'server/tests/setup/mockCuid.js'
 
 # Security pattern suppressions for specific known false positives
 # These are development scripts with proper context and are not security risks

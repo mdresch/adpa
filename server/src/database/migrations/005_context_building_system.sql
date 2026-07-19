@@ -122,20 +122,26 @@ CREATE INDEX IF NOT EXISTS idx_context_building_sessions_status ON context_build
 
 -- Create triggers for updated_at timestamps
 DROP TRIGGER IF EXISTS update_document_context_priorities_updated_at ON document_context_priorities;
+DROP TRIGGER IF EXISTS update_document_context_priorities_updated_at ON document_context_priorities;
 CREATE TRIGGER update_document_context_priorities_updated_at BEFORE UPDATE ON document_context_priorities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_template_creation_dependencies_updated_at ON template_creation_dependencies;
 DROP TRIGGER IF EXISTS update_template_creation_dependencies_updated_at ON template_creation_dependencies;
 CREATE TRIGGER update_template_creation_dependencies_updated_at BEFORE UPDATE ON template_creation_dependencies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS update_context_injection_rules_updated_at ON context_injection_rules;
+DROP TRIGGER IF EXISTS update_context_injection_rules_updated_at ON context_injection_rules;
 CREATE TRIGGER update_context_injection_rules_updated_at BEFORE UPDATE ON context_injection_rules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_document_context_relationships_updated_at ON document_context_relationships;
 DROP TRIGGER IF EXISTS update_document_context_relationships_updated_at ON document_context_relationships;
 CREATE TRIGGER update_document_context_relationships_updated_at BEFORE UPDATE ON document_context_relationships FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS update_context_value_assessments_updated_at ON context_value_assessments;
+DROP TRIGGER IF EXISTS update_context_value_assessments_updated_at ON context_value_assessments;
 CREATE TRIGGER update_context_value_assessments_updated_at BEFORE UPDATE ON context_value_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_context_building_sessions_updated_at ON context_building_sessions;
 DROP TRIGGER IF EXISTS update_context_building_sessions_updated_at ON context_building_sessions;
 CREATE TRIGGER update_context_building_sessions_updated_at BEFORE UPDATE ON context_building_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -158,7 +164,7 @@ LEFT JOIN document_context_priorities dcp ON dt.id = dcp.template_id AND dcp.is_
 LEFT JOIN template_creation_dependencies tcd ON dt.id = tcd.parent_template_id AND tcd.is_active = true
 LEFT JOIN context_injection_rules cir ON dt.id = cir.template_id AND cir.is_active = true
 LEFT JOIN context_building_sessions cbs ON dt.id = cbs.target_template_id AND cbs.is_active = true
-WHERE dt.is_active = true
+WHERE dt.deleted_at IS NULL -- templates has no is_active column; deleted_at IS NULL is the equivalent "active" check
 GROUP BY dt.id, dt.name, dt.description, dt.category
 ORDER BY avg_value_score DESC, avg_priority_level DESC;
 

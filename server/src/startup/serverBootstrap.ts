@@ -135,4 +135,43 @@ export async function initializeServerWithDependencyGraph(
   } catch (err) {
     console.warn('⚠️ Could not start stuck-job monitor', err)
   }
+
+  // Initialize capability attestation-lapse sweep (ADR-005 Phase 3 task 5)
+  if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+    try {
+      const { scheduleCapabilityAttestationSweep } = require('../jobs/capabilityAttestationJob')
+      scheduleCapabilityAttestationSweep()
+      console.log('✅ Capability attestation-lapse sweep scheduled (hourly)')
+    } catch (err) {
+      console.warn('⚠️ Could not start capability attestation-lapse sweep', err)
+    }
+  } else {
+    console.log('⏭️  Skipping in-memory capability attestation-lapse sweep')
+  }
+
+  // Initialize capability activation-history reconciliation sweep (ADR-005 Phase 5 task 3)
+  if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+    try {
+      const { scheduleCapabilityActivationReconciliation } = require('../jobs/capabilityActivationReconciliationJob')
+      scheduleCapabilityActivationReconciliation()
+      console.log('✅ Capability activation-history reconciliation sweep scheduled (every 30 minutes)')
+    } catch (err) {
+      console.warn('⚠️ Could not start capability activation-history reconciliation sweep', err)
+    }
+  } else {
+    console.log('⏭️  Skipping in-memory capability activation-history reconciliation sweep')
+  }
+
+  // Initialize break-glass timeout-escalation sweep (ADR-005 Phase 3 task 6)
+  if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+    try {
+      const { scheduleBreakGlassEscalationSweep } = require('../jobs/breakGlassEscalationJob')
+      scheduleBreakGlassEscalationSweep()
+      console.log('✅ Break-glass timeout-escalation sweep scheduled (every 6 hours)')
+    } catch (err) {
+      console.warn('⚠️ Could not start break-glass timeout-escalation sweep', err)
+    }
+  } else {
+    console.log('⏭️  Skipping in-memory break-glass timeout-escalation sweep')
+  }
 }

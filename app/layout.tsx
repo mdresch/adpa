@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import { Inter, Roboto } from "next/font/google"
+import { Inter, Roboto, Space_Grotesk, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
@@ -27,6 +27,16 @@ const roboto = Roboto({
   display: "swap",
 })
 
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+})
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+})
+
 export const metadata: Metadata = {
   title: "ADPA Intelligence Platform | Unified Project & Document Automation",
   description:
@@ -40,7 +50,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${roboto.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${roboto.variable} ${spaceGrotesk.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
         <ClarityProvider projectId="uhyjwbsgsg">
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
