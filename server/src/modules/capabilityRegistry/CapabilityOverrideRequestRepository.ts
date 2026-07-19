@@ -1,4 +1,4 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import { buildAdminOrActiveDepartmentMemberClause } from './departmentScopedQuery';
 import { insertAuditLogDigest } from './auditLogCoverage';
 
@@ -112,106 +112,56 @@ export class CapabilityOverrideRequestRepository {
   }
 
   /**
-   * ADR-012 Action Item 4: same transactional audit coverage as create() -- see
-   * auditLogCoverage.ts. Review finding (PR #742): the original version of this method
-   * read the pre-image with a plain SELECT (no lock) and updated with no expected-status
-   * predicate -- two concurrent decisions on the same request could both read the same
-   * "pending" pre-image, both digest it as the old value, and the second UPDATE would
-   * silently overwrite the first's decision while recording a false old-value digest.
-   * `SELECT ... FOR UPDATE` serializes concurrent decisions on one request row, and the
-   * `AND status = 'pending'` predicate makes the UPDATE itself a no-op (0 rows) if another
-   * transaction already decided it first -- checked via `result.rowCount`, not assumed.
+   * ADR-012 PR6b: delegates entirely to decide_capability_request (migration 445) --
+   * the procedure performs its own UPDATE and its own audit_log insert atomically in
+   * one DB call, so there's no TS-managed transaction or bare UPDATE left here to get
+   * wrong. p_reason is NULL for an approval (this method never took a reason param).
+   * The concurrency/locking fix PR3 (#742) added to this method's old direct-UPDATE
+   * body is superseded, not lost -- decide_capability_request has always used
+   * `SELECT ... FOR UPDATE` plus a `status <> 'pending'` check of its own (migration
+   * 445), so the same protection exists one layer deeper now.
    *
-   * Optional `externalClient` (review finding, PR #742/#744): `CapabilityOverrideController
-   * .approve` calls `promote_capability_status` and this method as two separate autocommit
-   * statements. If this call fails after the capability was already promoted, or a
-   * concurrent decision races between the two calls, the capability transition and the
-   * request's own status can disagree. When a caller passes an existing client, this
-   * method participates in that caller's transaction (no `BEGIN`/`COMMIT`/`ROLLBACK`/
-   * `release` of its own) instead of opening a new one -- letting the controller wrap
-   * both statements atomically. Called with no fifth argument, it behaves exactly as
-   * before: its own connection, its own transaction, its own release.
+   * Optional `runner` (review finding, PR #742/#744/#746/#748): `CapabilityOverrideController
+   * .approve` calls `promote_capability_status` and this method as two separate
+   * autocommit statements. If this call fails after the capability was already
+   * promoted, or a concurrent `withdraw` decides the request between the two calls,
+   * the capability transition and the request's own status can disagree -- an active
+   * capability with a still-pending (or withdrawn) request behind it. The controller
+   * now opens one client/transaction wrapping both calls and passes that client in
+   * here so both writes commit or roll back together; a bare `repo.markApproved(...)`
+   * with no fifth argument still works standalone (falls back to `this.pool`, its own
+   * implicit transaction) for any caller that doesn't need cross-statement atomicity.
+   *
+   * (PR5's independent copy of this same fix -- markApproved's own transactional
+   * SELECT/UPDATE shape with an `externalClient` parameter -- is superseded here, not
+   * lost: PR6b already replaced that shape entirely with delegation to
+   * `decide_capability_request`, which has its own `FOR UPDATE`/`status <> 'pending'`
+   * protection one layer deeper. See PR5's own commit for why it needed an independent
+   * fix in the first place: that branch doesn't descend from PR6a/PR6b.)
    */
   async markApproved(
     id: string,
     approvedBy: string,
     approvedByDepartment: string,
     overrideExpiresAt: Date,
-    externalClient?: PoolClient
+    runner: Pick<Pool, 'query'> = this.pool
   ): Promise<void> {
-    const client = externalClient ?? (await this.pool.connect());
-    const ownsTransaction = !externalClient;
-    try {
-      if (ownsTransaction) await client.query('BEGIN');
-      const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1 FOR UPDATE`, [id]);
-      if (before.rows.length === 0) {
-        throw new Error(`capability_override_request not found: ${id}`);
-      }
-      const result = await client.query(
-        `UPDATE capability_override_requests
-         SET status = 'approved', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, override_expires_at = $4
-         WHERE id = $1 AND status = 'pending'
-         RETURNING *`,
-        [id, approvedBy, approvedByDepartment, overrideExpiresAt]
-      );
-      if (result.rows.length === 0) {
-        throw new Error(`capability_override_request ${id} has already been decided (status: ${before.rows[0].status})`);
-      }
-      await insertAuditLogDigest(client, {
-        tableName: 'capability_override_requests',
-        rowId: id,
-        action: 'approve',
-        actorUserId: approvedBy,
-        oldRow: before.rows[0],
-        newRow: result.rows[0]
-      });
-      if (ownsTransaction) await client.query('COMMIT');
-    } catch (error) {
-      if (ownsTransaction) await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      if (ownsTransaction) client.release();
-    }
+    await runner.query(`SELECT decide_capability_request($1, 'approved', $2, $3, NULL, $4)`, [
+      id,
+      approvedBy,
+      approvedByDepartment,
+      overrideExpiresAt
+    ]);
   }
 
-  /**
-   * ADR-012 Action Item 4: same transactional audit coverage as create() -- see
-   * auditLogCoverage.ts. Same locking/expected-status fix as markApproved above (PR #742
-   * review finding) -- see that method's doc comment for the concurrency reasoning.
-   */
+  /** ADR-012 PR6b: same delegation as markApproved -- see that method's doc comment. */
   async markDenied(id: string, deniedBy: string, deniedByDepartment: string, denialReason: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1 FOR UPDATE`, [id]);
-      if (before.rows.length === 0) {
-        throw new Error(`capability_override_request not found: ${id}`);
-      }
-      const result = await client.query(
-        `UPDATE capability_override_requests
-         SET status = 'denied', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, denial_reason = $4
-         WHERE id = $1 AND status = 'pending'
-         RETURNING *`,
-        [id, deniedBy, deniedByDepartment, denialReason]
-      );
-      if (result.rows.length === 0) {
-        throw new Error(`capability_override_request ${id} has already been decided (status: ${before.rows[0].status})`);
-      }
-      await insertAuditLogDigest(client, {
-        tableName: 'capability_override_requests',
-        rowId: id,
-        action: 'deny',
-        actorUserId: deniedBy,
-        oldRow: before.rows[0],
-        newRow: result.rows[0]
-      });
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    await this.pool.query(`SELECT decide_capability_request($1, 'denied', $2, $3, $4, NULL)`, [
+      id,
+      deniedBy,
+      deniedByDepartment,
+      denialReason
+    ]);
   }
 
   /**

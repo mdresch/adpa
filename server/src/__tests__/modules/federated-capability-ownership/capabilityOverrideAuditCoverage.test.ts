@@ -43,6 +43,10 @@ function poolWithClient(client: any) {
   return { connect: jest.fn().mockResolvedValue(client) } as unknown as Pool;
 }
 
+function fakePool(rows: any[] = []) {
+  return { query: jest.fn().mockResolvedValue({ rows }) } as unknown as Pool;
+}
+
 describe('federated-capability-ownership: capabilityOverrideAuditCoverage', () => {
   // REQ-CAP-011: shared audit_log digest-insert helper
   describe('REQ-CAP-011: insertAuditLogDigest', () => {
@@ -126,59 +130,58 @@ describe('federated-capability-ownership: capabilityOverrideAuditCoverage', () =
       expect(client.release).toHaveBeenCalledTimes(1);
     });
 
-    it('markApproved() commits an audit_log entry in the same transaction as the UPDATE', async () => {
-      const client = fakeClient();
-      const repo = new CapabilityOverrideRequestRepository(poolWithClient(client));
+  });
+
+  // REQ-CAP-013 (ADR-012 PR6b): markApproved/markDenied now delegate entirely to
+  // decide_capability_request -- the procedure performs its own UPDATE and its own
+  // audit_log insert atomically, so there is no longer a TS-managed transaction or a
+  // bare UPDATE for these two methods to get wrong.
+  describe('REQ-CAP-013: CapabilityOverrideRequestRepository.markApproved/markDenied delegate to decide_capability_request', () => {
+    it('markApproved() calls decide_capability_request with the approved decision and no reason', async () => {
+      const pool = fakePool();
+      const repo = new CapabilityOverrideRequestRepository(pool);
+      const expiresAt = new Date();
+
+      await repo.markApproved('req-1', 'approver-1', 'Compliance', expiresAt);
+
+      const [sql, params] = (pool.query as jest.Mock).mock.calls[0];
+      expect(sql).toContain('decide_capability_request');
+      expect(sql).toContain("'approved'");
+      expect(params).toEqual(['req-1', 'approver-1', 'Compliance', expiresAt]);
+    });
+
+    it('markDenied() calls decide_capability_request with the denied decision and the denial reason', async () => {
+      const pool = fakePool();
+      const repo = new CapabilityOverrideRequestRepository(pool);
+
+      await repo.markDenied('req-1', 'denier-1', 'Compliance', 'not justified');
+
+      const [sql, params] = (pool.query as jest.Mock).mock.calls[0];
+      expect(sql).toContain('decide_capability_request');
+      expect(sql).toContain("'denied'");
+      expect(params).toEqual(['req-1', 'denier-1', 'Compliance', 'not justified']);
+    });
+
+    it('neither method issues a bare UPDATE or manages its own BEGIN/COMMIT transaction anymore', async () => {
+      const pool = fakePool();
+      const repo = new CapabilityOverrideRequestRepository(pool);
 
       await repo.markApproved('req-1', 'approver-1', 'Compliance', new Date());
+      await repo.markDenied('req-2', 'denier-1', 'Compliance', 'reason');
 
-      const sqlSeq = (client.query as jest.Mock).mock.calls.map(([sql]) => sql.trim());
-      expect(sqlSeq[0]).toMatch(/^BEGIN/i);
-      expect(sqlSeq.some((s: string) => /UPDATE capability_override_requests/i.test(s))).toBe(true);
-      expect(sqlSeq.some((s: string) => /INSERT INTO audit_log/i.test(s))).toBe(true);
-      expect(sqlSeq[sqlSeq.length - 1]).toMatch(/^COMMIT/i);
+      const allSql = (pool.query as jest.Mock).mock.calls.map(([sql]) => (sql as string).trim());
+      expect(allSql.every((sql: string) => !/^UPDATE/i.test(sql))).toBe(true);
+      expect(allSql.every((sql: string) => !/^BEGIN/i.test(sql))).toBe(true);
     });
 
-    it('markDenied() rolls back if the audit_log insert fails', async () => {
-      const client = fakeClient({ failOnAuditInsert: true });
-      const repo = new CapabilityOverrideRequestRepository(poolWithClient(client));
-
-      await expect(repo.markDenied('req-1', 'approver-1', 'Compliance', 'not justified')).rejects.toThrow();
-
-      const sqlSeq = (client.query as jest.Mock).mock.calls.map(([sql]) => sql.trim());
-      expect(sqlSeq[sqlSeq.length - 1]).toMatch(/^ROLLBACK/i);
-    });
-
-    // REQ-CAP-011 regression (review finding, PR #742): the original SELECT (pre-image)
-    // had no FOR UPDATE and the UPDATE had no expected-status predicate -- two concurrent
-    // decisions on one request could both digest the same "pending" pre-image and the
-    // second write would silently overwrite the first while recording a false old-value
-    // digest. Locks the row on read and requires status='pending' on write; a losing
-    // concurrent caller sees 0 rows affected and the whole transaction rolls back.
-    it('markApproved() locks the row (FOR UPDATE) and throws without writing anything if already decided', async () => {
-      const client = {
-        query: jest.fn(async (sql: string) => {
-          const s = sql.trim();
-          if (/^BEGIN|^ROLLBACK/i.test(s)) return {};
-          if (/SELECT \* FROM capability_override_requests WHERE id = \$1 FOR UPDATE/i.test(s)) {
-            return { rows: [{ id: 'req-1', status: 'denied' }] };
-          }
-          if (/UPDATE capability_override_requests/i.test(s)) {
-            // AND status = 'pending' predicate: already-decided row means 0 rows affected
-            return { rows: [] };
-          }
-          throw new Error(`unexpected query in already-decided guard test: ${s}`);
-        }),
-        release: jest.fn()
-      };
-      const repo = new CapabilityOverrideRequestRepository(poolWithClient(client));
-
-      await expect(repo.markApproved('req-1', 'approver-1', 'Compliance', new Date())).rejects.toThrow(
-        /already been decided/
-      );
-      expect((client.query as jest.Mock).mock.calls.some(([sql]) => /^ROLLBACK/i.test(sql.trim()))).toBe(true);
-      expect((client.query as jest.Mock).mock.calls.some(([sql]) => /INSERT INTO audit_log/i.test(sql))).toBe(false);
-    });
+    // The FOR UPDATE-locking / already-decided-guard fix PR3 (#742) added to this
+    // method's old direct-UPDATE body no longer applies to markApproved/markDenied
+    // themselves -- since PR6b, both are single delegating calls with no SELECT/UPDATE
+    // of their own to lock or guard. The same protection now lives one layer deeper,
+    // inside decide_capability_request (migration 445's own `SELECT ... FOR UPDATE` +
+    // `status <> 'pending'` check) -- proved by verify-decide-capability-request.ts's
+    // REQ-CAP-6A-007 ("an already-decided request cannot be decided again"), not by a
+    // mocked-pool unit test of these two thin wrappers.
   });
 
   // REQ-CAP-011: CapabilityOverrideExceptionRepository writes now transactionally audited

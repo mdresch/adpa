@@ -15,14 +15,14 @@ Implements [ADR-012: Capability Register and Request-Creation Lifecycle](../07-a
 | PR5 | 5 — request-creation forms | Phase 3 | PR1, PR3, PR4 |
 | PR6a | 6 — withdraw migration + stored procedure (additive) | Phase 4 | PR1, PR3 |
 | PR6b | 6 — migrate markApproved/markDenied to the procedure (refactor) | Phase 4 | PR6a |
-| PR6c | 6 — revoke UPDATE grant (write-lockdown) | Phase 4 | PR6b |
+| PR6c | 6 — trigger + guard-variable lockdown (write-lockdown) | Phase 4 | PR6b |
 | PR6d | 6 — My Requests view + withdraw endpoint (net-new) | Phase 4 | PR1, PR6a |
 | PR7 | 7 — Researcher Dashboard discovery | Phase 5 | PR4 |
 | PR8 | 8 — visible provenance marker | Phase 5 | PR3, PR6c (most useful after PR6d) |
 
 **Why PR5 depends on PR3**: ADR-012 §6 is explicit that ledger coverage (Item 4) must land before any UI write surface ships — an earlier ADR draft sequenced it after the forms and that was corrected as a defect, not a style choice. This is a hard content dependency, not just the risk-driven sequential-execution preference described below.
 
-**Why PR6d doesn't depend on PR6b/PR6c**: `withdraw` only needs `decide_capability_request` to exist (PR6a) — it doesn't need the old `markApproved`/`markDenied` paths migrated (PR6b) or `UPDATE` revoked (PR6c) to function correctly. They're still recommended in sequence because PR6b/c/d all touch `CapabilityOverrideRequestRepository`, and the plan's general preference for one-agent-sequential execution applies here too.
+**Why PR6d doesn't depend on PR6b/PR6c**: `withdraw` only needs `decide_capability_request` to exist (PR6a) — it doesn't need the old `markApproved`/`markDenied` paths migrated (PR6b) or the trigger-based lockdown active (PR6c) to function correctly. They're still recommended in sequence because PR6b/c/d all touch `CapabilityOverrideRequestRepository`, and the plan's general preference for one-agent-sequential execution applies here too.
 
 Extends the existing `federated-capability-ownership` governed-feature packet (`server/governed-features.manifest.json`) — this is not a new packet, and no manifest edit is needed for it. Node changes in PR3, PR4, and PR6a–PR6d go through the Governed Feature Loop (Contract Guards before implementation, `SKILL.md` update, manifest registration) per ADR-012 §6; Blazor/orchestrator changes go through the AEV workflow (`dotnet build -c Release`, orchestration boot success).
 
@@ -43,7 +43,7 @@ Any new test file placed under `server/src/__tests__/modules/federated-capabilit
 Recommendation: **sequential, one PR at a time, each validated before the next starts** — not multiple agents working different PRs in parallel. Reasons specific to this plan, not a generic default:
 
 - **Migration numbering collides under parallelism.** PR3 and PR6a each add a new numbered `server/migrations/*.sql` file. Two agents working in parallel will pick the same "next" number from a stale view of `server/migrations/`, and the collision only surfaces at merge time, not at write time.
-- **PR6b and PR6c are a real refactor and lockdown of already-shipped code**, not additive work: PR6b migrates `markApproved`/`markDenied` off direct `UPDATE`s onto the new stored procedure, and PR6c then revokes `UPDATE` on `capability_override_requests.status` entirely — the one-way door in this plan. Splitting them from PR6a (purely additive: migration + procedure, `UPDATE` still granted) and PR6d (net-new `withdraw`/`MyRequests.razor`, no lockdown coupling) means each PR carries a single risk profile and a clean revert point instead of bundling "safe to undo" and "not safe to undo" changes into one unit. This needs the existing `federated-capability-ownership` contract guards green *before and after* each of PR6b and PR6c, in isolation — running them alongside unrelated concurrent work makes a regression harder to attribute.
+- **PR6b and PR6c are a real refactor and lockdown of already-shipped code**, not additive work: PR6b migrates `markApproved`/`markDenied` off direct `UPDATE`s onto the new stored procedure, and PR6c then activates a `BEFORE UPDATE` trigger + session-local guard variable that makes `decide_capability_request` the only way `capability_override_requests`'s decision columns can change — the one-way door in this plan (not `REVOKE`; see PR6c's own corrected description). Splitting them from PR6a (purely additive: migration + procedure, no enforcement yet) and PR6d (net-new `withdraw`/`MyRequests.razor`, no lockdown coupling) means each PR carries a single risk profile and a clean revert point instead of bundling "safe to undo" and "not safe to undo" changes into one unit. This needs the existing `federated-capability-ownership` contract guards green *before and after* each of PR6b and PR6c, in isolation — running them alongside unrelated concurrent work makes a regression harder to attribute.
 - **The dependency graph is mostly real, not cosmetic**: PR4 needs PR2's helper; PR5 needs PR1, PR3, and PR4; PR6a needs PR1 and PR3; PR6b needs PR6a; PR6c needs PR6b; PR6d needs PR1 and PR6a. Only PR1, PR2, and PR3 (all of Phase 1) are genuinely independent of each other, and even there, the migration-numbering risk above argues for landing them one at a time rather than saving a small amount of wall-clock time.
 - **This is governance/audit-trail code.** A mistake here (as this session's own break-glass correction showed on ADR-005) is expensive to unwind after the fact. Validating each PR's AEV/governed-feature gates before starting the next is cheap insurance against exactly that.
 
@@ -124,7 +124,7 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 
 ## Phase 4: My Requests, withdraw, and write-lockdown consolidation
 
-Action Item 6 covers giving a request a full lifecycle (raise → pending → decided-or-withdrawn) and bringing `capability_override_requests.status` up to the same DB-layer lockdown standard `activation_status` already has. It's split into four PRs — PR6a (additive), PR6b (refactor), PR6c (lockdown), PR6d (net-new feature) — following an expand/migrate/contract shape so the one genuinely irreversible step (PR6c's `REVOKE`) is isolated from both the additive setup and the new feature work, instead of all four landing or failing as one unit. See the top-level dependency table and execution-strategy section for why this split exists and why PR6a–PR6d still run strictly sequentially regardless.
+Action Item 6 covers giving a request a full lifecycle (raise → pending → decided-or-withdrawn) and bringing `capability_override_requests.status` up to the same DB-layer lockdown standard `activation_status` already has. It's split into four PRs — PR6a (additive), PR6b (refactor), PR6c (lockdown), PR6d (net-new feature) — following an expand/migrate/contract shape so the one-way-door enforcement step (PR6c's trigger-and-guard-variable lockdown) is isolated from both the additive setup and the new feature work, instead of all four landing or failing as one unit. See the top-level dependency table and execution-strategy section for why this split exists and why PR6a–PR6d still run strictly sequentially regardless.
 
 **Scope note (applies to all of PR6a–PR6d)**: `withdraw` covers **override requests only**. Break-glass exceptions render read-only in My Requests — their multi-reviewer lifecycle (`exception_review_status`: `pending/active/disabled/escalated`, per-reviewer rows in `override_exception_reviews`) has no self-evident "withdrawn" meaning once a reviewer has already decided; that's a separate, future decision, not this PR's.
 
@@ -174,7 +174,11 @@ Action Item 6 covers giving a request a full lifecycle (raise → pending → de
 **Tasks**:
 1. Migration adding `guard_capability_override_requests_decision_columns()` (a `BEFORE UPDATE` trigger function checking whether any of `status`/`approved_by`/`approved_by_department`/`decided_at`/`denial_reason`/`withdrawn_at`/`override_expires_at` changed, and if so, requiring `current_setting('adpa.allow_capability_override_decision_write', true) = 'on'`, else `RAISE EXCEPTION`) and its `BEFORE UPDATE ON capability_override_requests` trigger.
 2. `decide_capability_request` (PR6a) updated to `PERFORM set_config('adpa.allow_capability_override_decision_write', 'on', true)` immediately before its own `UPDATE`, and back to `'off'` immediately after — same "close the bypass window right after the one sanctioned write" reasoning `promote_capability_status` already establishes for `activation_status`'s guard.
-3. Contract guard: real-Postgres verification (same standalone-script pattern as PR6a) that a direct `UPDATE capability_override_requests SET status = ...` (bypassing the procedure) is rejected by the trigger; `markApproved`/`markDenied`'s contract guards still pass unchanged now that the guard is active (proving PR6b's migration was complete — nothing was still relying on an unguarded direct `UPDATE`).
+3. Contract guard: real-Postgres verification (same standalone-script pattern as PR6a) that:
+   - a direct `UPDATE capability_override_requests SET status = ...` (bypassing the procedure) is rejected by the trigger;
+   - a direct `UPDATE` of any other guarded decision column (`approved_by`, `approved_by_department`, `decided_at`, `denial_reason`, `withdrawn_at`, `override_expires_at`) is likewise rejected when the guard variable isn't set;
+   - an `UPDATE` that changes only a non-decision column (e.g. touching some unrelated future column added to this table) still succeeds — proving the trigger protects only the governed decision fields, not the entire row. This is the most common implementation mistake for this shape of trigger: accidentally freezing legitimate maintenance writes along with the governed ones;
+   - `markApproved`/`markDenied`'s contract guards still pass unchanged now that the guard is active (proving PR6b's migration was complete — nothing was still relying on an unguarded direct `UPDATE`).
 
 ### PR6d — My Requests view + withdraw endpoint (Action Item 6, net-new)
 
@@ -205,8 +209,13 @@ Action Item 6 covers giving a request a full lifecycle (raise → pending → de
 **Depends on**: PR3 and PR6c (real chain entries to point to, and the lockdown that guarantees every future row has one); most useful after PR6d (decided/withdrawn rows to demonstrate against), though not a hard technical dependency.
 
 **Tasks**:
-1. A small ledger reference (hash-chain position or recorded timestamp) on every row in `Capabilities.razor`, `Approvals.razor`, and `MyRequests.razor` — the UI-side counterpart to ADR-005 Item 6's reconciliation job, now meaningful because PR3/PR6c guarantee every row actually has a chain entry to point to.
-2. Contract guard: the provenance marker resolves to a real `audit_log` row for a freshly created request, not a placeholder.
+1. A small provenance marker on every row in `Capabilities.razor`, `Approvals.razor`, and `MyRequests.razor`, using **one canonical format across all three pages** (ADR-012 itself deliberately left the exact display open — "hash-chain position or recorded timestamp" — but three pages independently choosing among that ambiguity would produce three different UIs for the same concept):
+   ```
+   Chain Entry: <audit_log.id>
+   Recorded: <audit_log.occurred_at, UTC>
+   ```
+   The UI never displays the digest/hash itself — that's an integrity proof for reconciliation tooling, not something a reviewer reads directly. The `audit_log.id` + `occurred_at` pair is what gives a reviewer a stable reference they can correlate against reconciliation output or an audit export, while staying compact enough for routine display. This is the UI-side counterpart to ADR-005 Item 6's reconciliation job, now meaningful because PR3/PR6c guarantee every row actually has a chain entry to point to.
+2. Contract guard: the displayed `Chain Entry`/`Recorded` values resolve to a real `audit_log` row for a freshly created request — the `audit_log.id` shown matches the persisted row's `id`, and the displayed timestamp matches that row's `occurred_at` (within normal rendering precision) — proving the marker is sourced from the ledger, not generated client-side as a placeholder.
 
 ---
 
