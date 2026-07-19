@@ -30,6 +30,13 @@ public sealed class CapabilityController(
     CapabilityRegistryClient capabilityRegistry,
     ILogger<CapabilityController> logger) : ControllerBase
 {
+    // ADR-012 Action Item 3: the Governor Portal Capability Register page's data
+    // source -- cross-capability, so no moduleId/portfolioId to scope the error payload
+    // to, same as the pending-list actions below.
+    [HttpGet]
+    public Task<IActionResult> ListCapabilities(CancellationToken cancellationToken) =>
+        RelayList("list", token => capabilityRegistry.ListAsync(token, cancellationToken));
+
     [HttpPost("{moduleId}/{portfolioId}/promote")]
     public Task<IActionResult> Promote(
         string moduleId, string portfolioId,

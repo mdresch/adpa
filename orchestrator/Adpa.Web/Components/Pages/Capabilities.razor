@@ -1,0 +1,132 @@
+@page "/capabilities"
+@attribute [Authorize]
+@inject IHttpClientFactory HttpClientFactory
+@using System.Net.Http.Json
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<PageTitle>Capabilities — Governor Portal</PageTitle>
+
+<h1 class="h3 mb-1" style="font-family: var(--gp-font); color: var(--gp-ink);">Capability Register</h1>
+<p class="mb-4" style="color: var(--gp-soft);">Every governed module your departments own, and its current activation status.</p>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (_loading)
+{
+    <p style="color: var(--gp-soft);">Loading&hellip;</p>
+}
+else if (_capabilities.Count == 0)
+{
+    <p style="color: var(--gp-soft);">No capabilities visible to your account.</p>
+}
+else
+{
+    <div class="d-flex flex-wrap gap-3">
+        @foreach (var item in _capabilities)
+        {
+            <div style="width: 320px;">
+                <GovernorCard>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <div style="font-size:18px; font-weight:700; letter-spacing:-.01em;">@item.ModuleId</div>
+                            <div style="font-size:12.5px; color:var(--gp-soft);">Portfolio @Shorten(item.PortfolioId) &middot; @item.FunctionalOwnerDepartment</div>
+                        </div>
+                        <StatusChip Label="@StatusLabel(item.ActivationStatus)" State="@StatusState(item.ActivationStatus)" />
+                    </div>
+
+                    @* ADR-012 PR5 wires this to a real action (Promote/Request Override/Raise
+                       Break-Glass), gated on the caller's department membership via PR1's
+                       CurrentUserService. This PR ships the status-aware label only, disabled --
+                       PR4's plan task explicitly allows shipping actions disabled/absent if it
+                       lands before PR5. *@
+                    <PillButton Variant="PillButton.ButtonVariant.Primary" Disabled="true">@ActionLabel(item.ActivationStatus)</PillButton>
+                </GovernorCard>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private List<CapabilityRegistryEntry> _capabilities = new();
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var client = HttpClientFactory.CreateClient("api");
+            var response = await client.GetAsync("api/Capability");
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadFromJsonAsync<CapabilityListResponse>(JsonOptions);
+                _capabilities = body?.Capabilities ?? new();
+            }
+            else
+            {
+                _error = $"Could not load capabilities ({(int)response.StatusCode}).";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load capabilities: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Shorten(string id) => id.Length > 8 ? $"{id[..8]}…" : id;
+
+    private static string StatusLabel(string activationStatus) => activationStatus switch
+    {
+        "active" => "Active",
+        "pending_department_approval" => "Pending approval",
+        "pending_re_approval" => "Pending re-approval",
+        "disabled" => "Disabled",
+        "draft" => "Draft",
+        _ => activationStatus
+    };
+
+    private static StatusChip.ChipState StatusState(string activationStatus) => activationStatus switch
+    {
+        "active" => StatusChip.ChipState.Approved,
+        "pending_department_approval" or "pending_re_approval" => StatusChip.ChipState.Pending,
+        "disabled" => StatusChip.ChipState.Declined,
+        _ => StatusChip.ChipState.Neutral
+    };
+
+    private static string ActionLabel(string activationStatus) => activationStatus switch
+    {
+        "draft" => "Promote",
+        "active" => "Request override",
+        "pending_department_approval" or "pending_re_approval" => "Awaiting decision",
+        "disabled" => "Raise break-glass",
+        _ => "—"
+    };
+
+    private sealed class CapabilityListResponse
+    {
+        [JsonPropertyName("capabilities")] public List<CapabilityRegistryEntry> Capabilities { get; set; } = new();
+    }
+
+    private sealed class CapabilityRegistryEntry
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("moduleId")] public string ModuleId { get; set; } = string.Empty;
+        [JsonPropertyName("portfolioId")] public string PortfolioId { get; set; } = string.Empty;
+        [JsonPropertyName("functionalOwnerDepartment")] public string? FunctionalOwnerDepartment { get; set; }
+        [JsonPropertyName("activationStatus")] public string ActivationStatus { get; set; } = string.Empty;
+    }
+}
