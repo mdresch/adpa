@@ -38,6 +38,7 @@ import {
   MessageSquare,
   Brain,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react"
 
 interface NavItem {
@@ -54,6 +55,7 @@ const navigation: NavItem[] = [
   { name: "Resource Capacity", href: "/capacity", icon: Gauge },
   { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true },
   { name: "Search", href: "/search", icon: Search },
+  { name: "Capability Register", href: "/capability-registry", icon: ShieldCheck },
   { name: "AI Providers", href: "/ai-providers", icon: Zap, adminOnly: true },
   { name: "AI Model Settings", href: "/settings/ai-models", icon: Brain, adminOnly: true },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
