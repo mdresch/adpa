@@ -1519,8 +1519,8 @@ export class ExtractionOrchestrationService {
 
       // Enqueue GKG sync when Neo4j is configured (non-fatal if enqueue fails)
       try {
-        const { isNeo4jConfigured } = await import("../../utils/neo4j")
-        const { addJob } = await import("../queueService")
+        const { isNeo4jConfigured } = await import("../../utils/neo4j.js")
+        const { addJob } = await import("../queueService.js")
         if (isNeo4jConfigured() && projectId) {
           // Check for existing pending/processing sync job for this project to prevent flooding
           const existingJob = await db.query(
@@ -1547,7 +1547,7 @@ export class ExtractionOrchestrationService {
         )
 
         if (hasRelevantData) {
-          const { importWBSFromProjectEntities } = await import("../wbsImportService")
+          const { importWBSFromProjectEntities } = await import("../wbsImportService.js")
 
           // Get the user ID who triggered the job
           const jobResult = await db.query('SELECT created_by FROM jobs WHERE id = $1', [jobId])

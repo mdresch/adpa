@@ -647,7 +647,7 @@ router.post("/cleanup",
       let cleanedCount = 0
       
       // Import queues
-      const { aiQueue, documentQueue, pipelineQueue, processFlowQueue } = await import("../services/queueService")
+      const { aiQueue, documentQueue, pipelineQueue, processFlowQueue } = await import("../services/queueService.js")
       
       // Remove from all queues
       for (const job of cancelledJobs.rows) {
@@ -1554,7 +1554,7 @@ router.post(
 
       // 3. Broadcast to all connected clients so UI reflects immediately
       try {
-        const { io: socketIo } = await import("../socket")
+        const { io: socketIo } = await import("../socket.js")
         socketIo.emit("job:emergency-stop", {
           killedBy,
           killedAt: new Date().toISOString(),

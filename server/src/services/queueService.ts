@@ -8,7 +8,7 @@ export * from "./queue/queueClient";
 // Skip automatic registration during tests to prevent leaking RabbitMQ connections.
 if (shouldRunWorkers() && process.env.NODE_ENV !== 'test') {
   logger.info("[QUEUE] Process role allows workers. Registering queue consumers...");
-  import("./queue/registerWorkers")
+  import("./queue/registerWorkers.js")
     .then(({ registerWorkers }) => {
       return registerWorkers();
     })

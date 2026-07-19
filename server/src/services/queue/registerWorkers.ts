@@ -26,9 +26,9 @@ let processFlowServiceInstance: any = null
 
 async function getProcessFlowServiceInstance() {
   if (!processFlowServiceInstance) {
-    const { getDatabasePool, connectDatabase } = await import("../../database/connection")
-    const { pool: currentPool } = await import("../../database/connection")
-    const ProcessFlowService = (await import("../processFlowService")).default
+    const { getDatabasePool, connectDatabase } = await import("../../database/connection.js")
+    const { pool: currentPool } = await import("../../database/connection.js")
+    const ProcessFlowService = (await import("../processFlowService.js")).default
     let activePool = currentPool
     if (!activePool) {
       try {
@@ -70,7 +70,7 @@ export async function registerWorkers(): Promise<void> {
       return { skipped: true, reason: `job already ${currentStatus}` }
     }
 
-    const { AIGenerationJobService } = await import("../jobs/AIGenerationJobService")
+    const { AIGenerationJobService } = await import("../jobs/AIGenerationJobService.js")
     const deps = await getQueueServiceDependencies()
     logger.info(`[WORKER] Processing AI generation job with ID: ${actualJobId} using worker: ${WORKER_ID}`)
 
@@ -93,7 +93,7 @@ export async function registerWorkers(): Promise<void> {
           // is cancelled too instead of being left as a stale empty draft.
           Promise.resolve()
             .then(async () => {
-              const { cancelJob } = await import("./queueClient")
+              const { cancelJob } = await import("./queueClient.js")
               await cancelJob(actualJobId, `Cancelled: exceeded ${timeoutMinutes}-minute processing limit.`)
             })
             .catch((cancelErr) => {
@@ -111,7 +111,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Save Inline Entities Processor
   aiQueue.process("save-inline-entities", 1, async (job) => {
-    const { SaveInlineEntitiesJobService } = await import("../jobs/SaveInlineEntitiesJobService")
+    const { SaveInlineEntitiesJobService } = await import("../jobs/SaveInlineEntitiesJobService.js")
     const deps = await getQueueServiceDependencies()
     return await SaveInlineEntitiesJobService.processJob(job as any, {
       workerId: WORKER_ID,
@@ -123,7 +123,7 @@ export async function registerWorkers(): Promise<void> {
   logger.info(`[QUEUE] Registered save-inline-entities processor on aiQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 
   // Document Convert Processor
-  import("../jobs/DocumentConversionJobService").then(({ DocumentConversionJobService }) => {
+  import("../jobs/DocumentConversionJobService.js").then(({ DocumentConversionJobService }) => {
     documentQueue.process("document-convert", 1, async (job) => {
       const deps = await getQueueServiceDependencies()
       return await DocumentConversionJobService.processJob(job as any, {
@@ -135,7 +135,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Document Upload Processor
-  import("../documentUploadService").then(({ processUploadedFile }) => {
+  import("../documentUploadService.js").then(({ processUploadedFile }) => {
     documentUploadQueue.process("file-process", 1, async (job) => {
       logger.info(`[WORKER] document-upload worker ${WORKER_ID} picked up job: ${job.id}`)
       try {
@@ -149,7 +149,7 @@ export async function registerWorkers(): Promise<void> {
   })
 
   // Baseline Extraction Processor
-  import("../jobs/BaselineExtractionJobService").then(({ BaselineExtractionJobService }) => {
+  import("../jobs/BaselineExtractionJobService.js").then(({ BaselineExtractionJobService }) => {
     baselineQueue.process("baseline-extract", 1, async (job) => {
       const deps = await getQueueServiceDependencies()
       return await BaselineExtractionJobService.processJob(job as any, {
@@ -165,7 +165,7 @@ export async function registerWorkers(): Promise<void> {
     const { jobId, userId, config } = job.data as any
     let dbPool = pool
     try {
-      const { getDatabasePool, connectDatabase } = await import("../../database/connection")
+      const { getDatabasePool, connectDatabase } = await import("../../database/connection.js")
       if (!dbPool) {
         try {
           dbPool = getDatabasePool()
@@ -311,7 +311,7 @@ export async function registerWorkers(): Promise<void> {
     try {
       await updateJobStatus(jobId, "processing", 10, WORKER_ID, "document-regeneration")
       logger.info(`Starting document regeneration job ${jobId} for document ${documentId}`)
-      const { DocumentRegenerationService } = await import("../documentRegenerationService")
+      const { DocumentRegenerationService } = await import("../documentRegenerationService.js")
       await DocumentRegenerationService.executeRegenerationJob({ documentId, templateId, provider, model, versionType, temperature, userId, jobId })
       await updateJobStatus(jobId, "completed", 100, WORKER_ID, "document-regeneration")
       logger.info(`Document regeneration job completed: ${jobId}`)
@@ -326,7 +326,7 @@ export async function registerWorkers(): Promise<void> {
   // Confluence Publishing Processor
   confluenceQueue.process("publish-to-confluence", 1, async (job) => {
     try {
-      const { PublishToConfluenceJobService } = await import("../jobs/PublishToConfluenceJobService")
+      const { PublishToConfluenceJobService } = await import("../jobs/PublishToConfluenceJobService.js")
       return await PublishToConfluenceJobService.processJob(job as any)
     } catch (error) {
       logger.error(error, `[PUBLISH-CONFLUENCE] Job failed: ${job.id}`)
@@ -340,7 +340,7 @@ export async function registerWorkers(): Promise<void> {
     try {
       await updateJobStatus(jobId, "processing", 10, WORKER_ID, "quality-audit")
       logger.info(`[QUALITY-AUDIT-JOB] Starting quality audit job ${jobId} for document ${documentId}`)
-      const { qualityAuditService } = await import("../qualityAuditService")
+      const { qualityAuditService } = await import("../qualityAuditService.js")
       const auditResult = await qualityAuditService.auditDocument(documentId, documentContent, documentType, projectContext, userId)
       await updateJobStatus(jobId, "completed", 100, WORKER_ID, "quality-audit")
       logger.info(`[QUALITY-AUDIT-JOB] Quality audit completed: ${jobId}`, { overallScore: (auditResult as any).overallScore, grade: (auditResult as any).overallGrade })
@@ -354,7 +354,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Project Data Extraction Parent Processor
   extractionQueue.process("extract-project-data", 1, async (job) => {
-    const { ExtractionOrchestrationService } = await import("../jobs/ExtractionOrchestrationService")
+    const { ExtractionOrchestrationService } = await import("../jobs/ExtractionOrchestrationService.js")
     const deps = await getQueueServiceDependencies()
     return await ExtractionOrchestrationService.processJob(job as any, { workerId: WORKER_ID, updateJobStatus }, deps)
   })
@@ -362,8 +362,8 @@ export async function registerWorkers(): Promise<void> {
   // Child Entity Extractors
   if (process.env.NODE_ENV !== 'test') {
     ; (async () => {
-      const { extractSingleEntityType, saveSingleEntityType } = await import("../extraction/ExtractionOrchestrator")
-      const { initializeRegistry } = await import("../extraction/ExtractionRegistry")
+      const { extractSingleEntityType, saveSingleEntityType } = await import("../extraction/ExtractionOrchestrator.js")
+      const { initializeRegistry } = await import("../extraction/ExtractionRegistry.js")
       await initializeRegistry()
 
       const ENTITY_TYPES = [
@@ -448,7 +448,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Digital Twin Event Processing
   if (process.env.NODE_ENV !== 'test') {
-    import("../digitalTwinEventService").then(({ processEvent }) => {
+    import("../digitalTwinEventService.js").then(({ processEvent }) => {
       digitalTwinEventQueue.process("process-event", 1, async (job) => {
         const { eventId } = job.data as { eventId: string }
         logger.info(`[WORKER] Digital Twin event worker ${WORKER_ID} processing event: ${eventId}`)
@@ -467,7 +467,7 @@ export async function registerWorkers(): Promise<void> {
 
   // Digital Twin Document Trigger Processing
   if (process.env.NODE_ENV !== 'test') {
-    import("../digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
+    import("../digitalTwinTriggerService.js").then(({ processDocumentTrigger }) => {
       digitalTwinTriggerQueue.process("process-trigger", 1, async (job) => {
         const { triggerId } = job.data as { triggerId: string }
         logger.info(`[WORKER] Digital Twin trigger worker ${WORKER_ID} processing trigger: ${triggerId}`)
@@ -636,9 +636,9 @@ export async function registerWorkers(): Promise<void> {
   departmentClaimsSyncQueue.process("department-claims-sync", 1, async (job) => {
     const { jobId, userId, claims, isRemoval } = job.data as any
     try {
-      const { processClaimsSyncJob } = await import("../../modules/departments/departmentClaimsSyncJob")
-      const { firebaseClaimsAdmin } = await import("../../modules/departments/firebaseClaimsAdmin")
-      const { createClaimsSyncQueueAdapter } = await import("../../modules/departments/claimsSyncQueueAdapter")
+      const { processClaimsSyncJob } = await import("../../modules/departments/departmentClaimsSyncJob.js")
+      const { firebaseClaimsAdmin } = await import("../../modules/departments/firebaseClaimsAdmin.js")
+      const { createClaimsSyncQueueAdapter } = await import("../../modules/departments/claimsSyncQueueAdapter.js")
       await processClaimsSyncJob(
         {
           db: { query: (sql: string, params?: any[]) => pool.query(sql, params) },

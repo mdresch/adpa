@@ -779,7 +779,7 @@ class AIService {
     // Fetch AI Gateway API key from database (optional - will fallback to direct provider calls if not configured)
     let gatewayApiKey: string | undefined = undefined
     try {
-      const { getAIGatewayKey } = await import("../routes/settings")
+      const { getAIGatewayKey } = await import("../routes/settings.js")
       const result = await getAIGatewayKey()
       gatewayApiKey = result ?? undefined
       if (!gatewayApiKey) {

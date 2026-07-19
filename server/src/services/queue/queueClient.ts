@@ -332,7 +332,7 @@ export const queueService = new Proxy({} as ReturnType<typeof createQueueService
 })
 
 export async function getQueueServiceDependencies(): Promise<QueueServiceDependencies> {
-  const { getDatabasePool, connectDatabase } = await import("../../database/connection")
+  const { getDatabasePool, connectDatabase } = await import("../../database/connection.js")
   try {
     getDatabasePool()
   } catch (_err) {
@@ -361,7 +361,7 @@ export async function initializeQueues(): Promise<void> {
 
   // Pillar 1: Orphan Job Recovery
   try {
-    const { getDatabasePool } = await import("../../database/connection")
+    const { getDatabasePool } = await import("../../database/connection.js")
     const dbPool = getDatabasePool()
     if (dbPool) {
       const recoveryResult = await pool.query(
@@ -372,7 +372,7 @@ export async function initializeQueues(): Promise<void> {
       
       if (recoveryResult.rows.length > 0) {
         logger.info(`[QUEUE RECOVERY] Found ${recoveryResult.rows.length} orphaned jobs. Recovering...`)
-        const { isNeverRequeueJob } = await import("../jobs/protectedQueues")
+        const { isNeverRequeueJob } = await import("../jobs/protectedQueues.js")
 
         for (const row of recoveryResult.rows) {
           try {
@@ -392,7 +392,7 @@ export async function initializeQueues(): Promise<void> {
               )
               logger.warn(`[QUEUE RECOVERY] Job ${row.id} on protected queue '${row.queue_name}' — parked as 'stuck', NOT auto-requeued.`)
               try {
-                const { notificationService } = await import("../notificationService")
+                const { notificationService } = await import("../notificationService.js")
                 void notificationService.sendStuckJobAlert({
                   jobId: row.id,
                   queueName: row.queue_name,

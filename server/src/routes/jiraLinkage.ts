@@ -85,7 +85,7 @@ router.get("/document/:documentId",
       }
 
       // Check if user has access to the document
-      const { pool } = await import("../database/connection")
+      const { pool } = await import("../database/connection.js")
       const documentCheck = await pool.query(
         `SELECT d.id, d.project_id, p.owner_id, p.team_members, p.created_by
          FROM documents d
@@ -163,7 +163,7 @@ router.post("/create-issue",
       const { issueTitle, issueDescription, issueType, priority, confluenceUrl } = req.body
       
       // Check if user has access to the document
-      const { pool } = await import("../database/connection")
+      const { pool } = await import("../database/connection.js")
       const documentCheck = await pool.query(
         `SELECT d.id, d.name, d.project_id, p.owner_id, p.team_members, p.created_by
          FROM documents d
@@ -298,7 +298,7 @@ router.post("/test/:integrationId",
     const { integrationId } = req.params
     
     try {
-      const { pool } = await import("../database/connection")
+      const { pool } = await import("../database/connection.js")
       
       // Get integration
       const integrationResult = await pool.query(
@@ -328,7 +328,7 @@ router.post("/test/:integrationId",
       }
       
       // Test connection
-      const { JiraService } = await import("../services/jiraService")
+      const { JiraService } = await import("../services/jiraService.js")
       const jiraService = new JiraService({
         baseUrl: integration.configuration.baseUrl || credentials.baseUrl,
         email: credentials.email,

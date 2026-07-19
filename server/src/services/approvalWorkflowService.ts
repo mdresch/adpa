@@ -382,7 +382,7 @@ export class ApprovalWorkflowService {
                     if (crDocResult.rows.length > 0) {
                       const { source_doc_id, drift_record_id, source_title } = crDocResult.rows[0];
                       if (source_doc_id && source_title) {
-                        const { cascadingRegenerationService } = await import('../modules/cascading-regeneration/CascadingRegenerationService');
+                        const { cascadingRegenerationService } = await import('../modules/cascading-regeneration/CascadingRegenerationService.js');
                         await cascadingRegenerationService.triggerCascade(
                           source_title,
                           request.project_id,
