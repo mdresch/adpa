@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { insertAuditLogDigest } from './auditLogCoverage';
+import { buildAdminOrActiveDepartmentMemberClause } from './departmentScopedQuery';
 
 export interface CapabilityOverrideRequestRow {
   id: string;
@@ -220,16 +221,16 @@ export class CapabilityOverrideRequestRepository {
    * department name alone" rule).
    */
   async listPendingForUser(userId: string, isAdmin: boolean): Promise<PendingOverrideRequestRow[]> {
+    const scopeClause = buildAdminOrActiveDepartmentMemberClause({
+      portfolioColumn: 'cr.portfolio_id',
+      departmentColumn: 'r.requested_by_department'
+    });
     const result = await this.pool.query(
       `SELECT r.*, cr.module_id, cr.portfolio_id
        FROM capability_override_requests r
        JOIN capability_registry cr ON cr.id = r.capability_id
        WHERE r.status = 'pending'
-         AND ($1::boolean = true OR EXISTS (
-           SELECT 1 FROM user_departments ud
-           WHERE ud.user_id = $2 AND ud.portfolio_id = cr.portfolio_id
-             AND ud.department = r.requested_by_department AND ud.is_active = true
-         ))
+         AND ${scopeClause}
        ORDER BY r.requested_at ASC`,
       [isAdmin, userId]
     );

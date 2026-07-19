@@ -4,7 +4,7 @@
 **Version**: 1.0
 **Date**: 2026-07-17
 
-Implements [ADR-012: Capability Register and Request-Creation Lifecycle](../07-architecture/ADR-012-capability-register-and-request-lifecycle.md). ADR-012 §6 states each of its eight Action Items is its own PR — this plan keeps that 1:1. **PR1–PR8** below, one per Action Item, grouped into five *phases* purely to show the dependency structure between them; a phase is not a bigger PR that bundles its tasks together.
+Implements [ADR-012: Capability Register and Request-Creation Lifecycle](../07-architecture/ADR-012-capability-register-and-request-lifecycle.md). ADR-012 §6 states each of its eight Action Items is its own PR — this plan keeps that 1:1 for seven of them. Action Item 6 (My Requests, withdraw, write-lockdown) is the exception: it bundles an additive migration, a stored procedure, a refactor of already-shipped decision code, and a DB permission revocation into one described unit, and the execution-strategy section below flags it as the plan's highest-risk PR for exactly that reason. It is broken into four smaller PRs (**PR6a–PR6d**) following an expand/migrate/contract shape, so each carries one risk profile and one clean revert point rather than all four landing or failing together — see Phase 4. **PR1–PR5, PR6a–PR6d, PR7–PR8** below are grouped into five *phases* purely to show the dependency structure between them; a phase is not a bigger PR that bundles its tasks together.
 
 | PR | Action Item | Phase | Depends on |
 |---|---|---|---|
@@ -12,19 +12,29 @@ Implements [ADR-012: Capability Register and Request-Creation Lifecycle](../07-a
 | PR2 | 2 — shared scoping helper | Phase 1 | none |
 | PR3 | 4 — retroactive audit_log coverage | Phase 1 | none |
 | PR4 | 3 — Capability Register read surface | Phase 2 | PR2 |
-| PR5 | 5 — request-creation forms | Phase 3 | PR1, PR4 |
-| PR6 | 6 — My Requests, withdraw, write-lockdown | Phase 4 | PR1, PR3 |
+| PR5 | 5 — request-creation forms | Phase 3 | PR1, PR3, PR4 |
+| PR6a | 6 — withdraw migration + stored procedure (additive) | Phase 4 | PR1, PR3 |
+| PR6b | 6 — migrate markApproved/markDenied to the procedure (refactor) | Phase 4 | PR6a |
+| PR6c | 6 — revoke UPDATE grant (write-lockdown) | Phase 4 | PR6b |
+| PR6d | 6 — My Requests view + withdraw endpoint (net-new) | Phase 4 | PR1, PR6a |
 | PR7 | 7 — Researcher Dashboard discovery | Phase 5 | PR4 |
-| PR8 | 8 — visible provenance marker | Phase 5 | PR3, PR6 (most useful after) |
+| PR8 | 8 — visible provenance marker | Phase 5 | PR3, PR6c (most useful after PR6d) |
 
-Extends the existing `federated-capability-ownership` governed-feature packet (`server/governed-features.manifest.json`) — this is not a new packet. Node changes in PR3, PR4, and PR6 go through the Governed Feature Loop (Contract Guards before implementation, `SKILL.md` update, manifest registration) per ADR-012 §6; Blazor/orchestrator changes go through the AEV workflow (`dotnet build -c Release`, orchestration boot success).
+**Why PR5 depends on PR3**: ADR-012 §6 is explicit that ledger coverage (Item 4) must land before any UI write surface ships — an earlier ADR draft sequenced it after the forms and that was corrected as a defect, not a style choice. This is a hard content dependency, not just the risk-driven sequential-execution preference described below.
 
+**Why PR6d doesn't depend on PR6b/PR6c**: `withdraw` only needs `decide_capability_request` to exist (PR6a) — it doesn't need the old `markApproved`/`markDenied` paths migrated (PR6b) or `UPDATE` revoked (PR6c) to function correctly. They're still recommended in sequence because PR6b/c/d all touch `CapabilityOverrideRequestRepository`, and the plan's general preference for one-agent-sequential execution applies here too.
+
+Extends the existing `federated-capability-ownership` governed-feature packet (`server/governed-features.manifest.json`) — this is not a new packet, and no manifest edit is needed for it. Node changes in PR3, PR4, and PR6a–PR6d go through the Governed Feature Loop (Contract Guards before implementation, `SKILL.md` update, manifest registration) per ADR-012 §6; Blazor/orchestrator changes go through the AEV workflow (`dotnet build -c Release`, orchestration boot success).
+
+The packet's actual current manifest entry (verified against `server/governed-features.manifest.json`, not assumed — an earlier draft of this plan guessed a regex that doesn't match reality):
 ```json
 {
   "id": "federated-capability-ownership",
-  "testPathPattern": "capabilityOwnership|moduleActivation|capabilityRegister|capabilityRequestLifecycle"
+  "testModuleDir": "federated-capability-ownership",
+  "testPathPattern": "modules/federated-capability-ownership"
 }
 ```
+Any new test file placed under `server/src/__tests__/modules/federated-capability-ownership/` is already covered by this pattern — none of PR1–PR6d's new Node contract guards need a manifest change, only new test files in the existing directory.
 
 ---
 
@@ -32,12 +42,12 @@ Extends the existing `federated-capability-ownership` governed-feature packet (`
 
 Recommendation: **sequential, one PR at a time, each validated before the next starts** — not multiple agents working different PRs in parallel. Reasons specific to this plan, not a generic default:
 
-- **Migration numbering collides under parallelism.** PR3 and PR6 each add a new numbered `server/migrations/*.sql` file. Two agents working in parallel will pick the same "next" number from a stale view of `server/migrations/`, and the collision only surfaces at merge time, not at write time.
-- **PR6 is a real refactor of already-shipped code**, not additive work: it revokes direct `UPDATE` on `capability_override_requests.status` and migrates `markApproved`/`markDenied` to a new stored procedure. This needs the existing `federated-capability-ownership` contract guards green *before and after*, in isolation — running it alongside unrelated concurrent work makes a regression harder to attribute.
-- **The dependency graph is mostly real, not cosmetic**: PR4 needs PR2's helper; PR5 needs PR1 and PR4; PR6 needs PR1 and PR3. Only PR1, PR2, and PR3 (all of Phase 1) are genuinely independent of each other, and even there, the migration-numbering risk above argues for landing them one at a time rather than saving a small amount of wall-clock time.
+- **Migration numbering collides under parallelism.** PR3 and PR6a each add a new numbered `server/migrations/*.sql` file. Two agents working in parallel will pick the same "next" number from a stale view of `server/migrations/`, and the collision only surfaces at merge time, not at write time.
+- **PR6b and PR6c are a real refactor and lockdown of already-shipped code**, not additive work: PR6b migrates `markApproved`/`markDenied` off direct `UPDATE`s onto the new stored procedure, and PR6c then revokes `UPDATE` on `capability_override_requests.status` entirely — the one-way door in this plan. Splitting them from PR6a (purely additive: migration + procedure, `UPDATE` still granted) and PR6d (net-new `withdraw`/`MyRequests.razor`, no lockdown coupling) means each PR carries a single risk profile and a clean revert point instead of bundling "safe to undo" and "not safe to undo" changes into one unit. This needs the existing `federated-capability-ownership` contract guards green *before and after* each of PR6b and PR6c, in isolation — running them alongside unrelated concurrent work makes a regression harder to attribute.
+- **The dependency graph is mostly real, not cosmetic**: PR4 needs PR2's helper; PR5 needs PR1, PR3, and PR4; PR6a needs PR1 and PR3; PR6b needs PR6a; PR6c needs PR6b; PR6d needs PR1 and PR6a. Only PR1, PR2, and PR3 (all of Phase 1) are genuinely independent of each other, and even there, the migration-numbering risk above argues for landing them one at a time rather than saving a small amount of wall-clock time.
 - **This is governance/audit-trail code.** A mistake here (as this session's own break-glass correction showed on ADR-005) is expensive to unwind after the fact. Validating each PR's AEV/governed-feature gates before starting the next is cheap insurance against exactly that.
 
-If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an explicit, communicated migration-number reservation* (e.g. "PR1 takes no migration, PR2 takes no migration, PR3 takes 444") — PR4 onward should stay strictly sequential regardless.
+If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an explicit, communicated migration-number reservation* (e.g. "PR1 takes no migration, PR2 takes no migration, PR3 takes 444") — PR4 onward, including all of PR6a–PR6d, should stay strictly sequential regardless.
 
 ---
 
@@ -55,12 +65,14 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 
 ### PR2 — Extract shared admin/member scoping helper (Action Item 2)
 
-**Objective**: one place decides "admin/super_admin sees everything; a plain user sees only their own active `functional_owner_department`/`requested_by_department` membership" — today duplicated between `CapabilityOverrideController.listPending` and `CapabilityOverrideExceptionController.listPending`, about to become a third copy in PR4.
+**Correction (2026-07-17, verified against the actual repositories):** an earlier draft of this plan (and of ADR-012 §A/§6 Item 2) asserted the admin-sees-all/member-sees-own-department predicate is duplicated across *both* `CapabilityOverrideController.listPending` and `CapabilityOverrideExceptionController.listPending`. It is not. `CapabilityOverrideExceptionRepository.listPendingForUser`'s non-admin branch authorizes by **named-reviewer-assignment** (`EXISTS (... override_exception_reviews rev WHERE rev.reviewer_user_id = $2 AND rev.decision IS NULL)`) — a different table, a different mechanism, no department check at all — matching its own doc comment ("a plain user sees only exceptions where THEY are a named reviewer... matches `decideReview`'s own authorization"). Only `CapabilityOverrideRequestRepository.listPendingForUser` genuinely shares the admin-sees-all/department-membership predicate this PR extracts. See ADR-012 §A's matching correction.
+
+**Objective**: one place decides "admin/super_admin sees everything; a plain user sees only their own active department membership" — today implemented once, correctly, in `CapabilityOverrideRequestRepository.listPendingForUser`, about to become a second, easily-drifting copy in PR4's new capability-registry list endpoint. `CapabilityOverrideExceptionController.listPending` is not a consumer of this helper — its reviewer-assignment authorization is a distinct, already-correct concern this PR does not touch.
 
 **Tasks**:
-1. Extract the scoping predicate into one shared repository helper (e.g. `DepartmentScopedQuery` or a shared SQL fragment builder), consumed by both existing `listPending` methods with no behavior change — this task's contract guard is the existing test suite passing unchanged.
-2. Name the canonical scoping column explicitly: `functional_owner_department` (on `capability_registry`, joined by `portfolio_id`) for anything scoping *capabilities*; `requested_by_department` (on the request row itself) for anything scoping *requests*. These usually agree but are not the same predicate (see ADR-012 §A) — the helper takes the column as a parameter rather than assuming one.
-3. Contract guard: existing `overrides/pending`/`exceptions/pending` scoping tests pass unchanged after extraction; a new test asserts the helper's admin-sees-all and member-sees-own-department branches directly, independent of either controller.
+1. Extract the scoping predicate into one shared repository helper (e.g. `DepartmentScopedQuery` or a shared SQL fragment builder), consumed by `CapabilityOverrideRequestRepository.listPendingForUser` with no behavior change — this task's contract guard is the existing test suite passing unchanged. `CapabilityOverrideExceptionRepository.listPendingForUser` is left as-is.
+2. Name the canonical scoping column explicitly: `functional_owner_department` (on `capability_registry`, joined by `portfolio_id`) for anything scoping *capabilities* (PR4's consumer); `requested_by_department` (on the request row itself) for anything scoping *requests* (this PR's consumer, `listPendingForUser`). These usually agree but are not the same predicate (see ADR-012 §A) — the helper takes the column as a parameter rather than assuming one.
+3. Contract guard: the existing `overrides/pending` scoping test passes unchanged after extraction; a new test asserts the helper's admin-sees-all and member-sees-own-department branches directly, independent of the controller. `exceptions/pending`'s existing tests are untouched by this PR (no code path of theirs changes).
 
 ### PR3 — Retroactive audit_log hash-chain coverage (Action Item 4)
 
@@ -69,7 +81,7 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 **Tasks**:
 1. Migration `server/migrations/444_capability_override_requests_audit_coverage.sql` (or next free number — coordinate before starting, per the execution-strategy note above): no schema change to `capability_override_requests` itself; this task is about the write path, not the table.
 2. Wrap `create()`, `markApproved()`, `markDenied()` (and their exception-table equivalents in `CapabilityOverrideExceptionRepository`) in a transaction that also inserts into `audit_log`, routing through the existing `trg_audit_log_before_insert` hash-chain trigger (`000_baseline.sql:11437-11460`) — matching the `INSERT INTO audit_log(table_name, row_id, action, old_values, new_values)` shape already used elsewhere (`000_baseline.sql:11421-11429`).
-3. **Digest, not raw content** (ADR-012 §D, hard requirement): the `new_values`/`old_values` jsonb for these three tables carries a digest of the canonicalized row (e.g. `sha256(canonical_json(row))`), never the raw `justification` text or requester identity — those stay solely in the access-controlled `capability_override_requests`/`capability_override_exceptions` rows. Write the canonicalization function once, shared by this task and PR6's `decide_capability_request` procedure.
+3. **Digest, not raw content** (ADR-012 §D, hard requirement): the `new_values`/`old_values` jsonb for these three tables carries a digest of the canonicalized row (e.g. `sha256(canonical_json(row))`), never the raw `justification` text or requester identity — those stay solely in the access-controlled `capability_override_requests`/`capability_override_exceptions` rows. Write the canonicalization function once, shared by this task and PR6a's `decide_capability_request` procedure.
 4. Repositories currently take a bare `Pool` — thread a transaction-scoped client through `create`/`markApproved`/`markDenied` (a `PoolClient` parameter) rather than issuing the `audit_log` insert as a separate, unguaranteed second query.
 5. Contract guard: a request created via `create()` has a matching `audit_log` row in the same transaction (real-Postgres integration test, not mocked); a forced failure after the request insert but before the audit insert rolls back both (transactional integrity, not just "both usually happen"); the `audit_log` row's `new_values` contains a digest field and does **not** contain the literal justification string.
 
@@ -96,7 +108,7 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 
 ### PR5 — Request-creation forms (Action Item 5)
 
-**Depends on**: PR1 (profile lookup), PR4 (a page for the forms to live in).
+**Depends on**: PR1 (profile lookup), PR3 (ledger coverage — ADR-012 §6 requires this land before any UI write surface ships, not just as a risk-driven sequencing preference), PR4 (a page for the forms to live in).
 
 **Objective**: make `override/request`/`exceptions/request` — endpoints that exist today with zero UI callers — reachable from the product.
 
@@ -112,16 +124,18 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 
 ## Phase 4: My Requests, withdraw, and write-lockdown consolidation
 
-### PR6 — My Requests, withdraw, write-lockdown (Action Item 6)
+Action Item 6 covers giving a request a full lifecycle (raise → pending → decided-or-withdrawn) and bringing `capability_override_requests.status` up to the same DB-layer lockdown standard `activation_status` already has. It's split into four PRs — PR6a (additive), PR6b (refactor), PR6c (lockdown), PR6d (net-new feature) — following an expand/migrate/contract shape so the one genuinely irreversible step (PR6c's `REVOKE`) is isolated from both the additive setup and the new feature work, instead of all four landing or failing as one unit. See the top-level dependency table and execution-strategy section for why this split exists and why PR6a–PR6d still run strictly sequentially regardless.
+
+**Scope note (applies to all of PR6a–PR6d)**: `withdraw` covers **override requests only**. Break-glass exceptions render read-only in My Requests — their multi-reviewer lifecycle (`exception_review_status`: `pending/active/disabled/escalated`, per-reviewer rows in `override_exception_reviews`) has no self-evident "withdrawn" meaning once a reviewer has already decided; that's a separate, future decision, not this PR's.
+
+### PR6a — Withdraw migration + stored procedure (Action Item 6, additive)
 
 **Depends on**: PR1 (profile lookup — requester identity), PR3 (ledger coverage — the procedure this PR adds must also honor it).
 
-**Objective**: give a request a full lifecycle (raise → pending → decided-or-withdrawn) instead of a one-way submission, and — since this is the one place ADR-012 touches an already-shipped write path — bring `capability_override_requests.status` up to the same DB-layer lockdown standard `activation_status` already has.
-
-**Scope note**: `withdraw` covers **override requests only**. Break-glass exceptions render read-only in My Requests — their multi-reviewer lifecycle (`exception_review_status`: `pending/active/disabled/escalated`, per-reviewer rows in `override_exception_reviews`) has no self-evident "withdrawn" meaning once a reviewer has already decided; that's a separate, future decision, not this PR's.
+**Objective**: add the schema and the stored procedure the rest of Phase 4 builds on, without touching any existing write path yet. `markApproved`/`markDenied` keep using their current direct `UPDATE`s after this PR lands — the procedure exists and is callable, but isn't yet the only way to change `status`. This keeps the PR purely additive and trivially revertible.
 
 **Tasks**:
-1. Migration `server/migrations/44X_capability_override_requests_withdraw.sql`:
+1. Migration `server/migrations/44X_capability_override_requests_withdraw.sql` (coordinate the next free number per the execution-strategy note above):
    ```sql
    ALTER TABLE public.capability_override_requests
      DROP CONSTRAINT capability_override_requests_status_check,
@@ -132,15 +146,43 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
    -- (approved_by IS DISTINCT FROM requested_by) forbids recording the
    -- withdrawer there, and the withdrawer IS the requester by definition.
    ```
-2. Stored procedure `decide_capability_request(request_id, decision, decided_by, decided_by_department, reason, override_expires_at)` where `decision IN ('approved', 'denied', 'withdrawn')` — the **only** permitted writer of `capability_override_requests.status` going forward:
-   - `REVOKE UPDATE (status, approved_by, approved_by_department, decided_at, denial_reason, withdrawn_at) ON capability_override_requests FROM <app role>`.
+2. Stored procedure `decide_capability_request(request_id, decision, decided_by, decided_by_department, reason, override_expires_at)` where `decision IN ('approved', 'denied', 'withdrawn')`, intended to become (in PR6c) the **only** permitted writer of `capability_override_requests.status`:
    - For `withdrawn`: enforce `decided_by = requested_by` (the narrower, requester-only check — department membership is irrelevant here, unlike every other action in this ADR) and `status = 'pending'` at time of transition.
    - For `approved`/`denied`: same two-distinct-department-member check the app layer already does (ADR-005 Phase 2 task 4's rule), now also enforced here as defense in depth.
    - Performs the `audit_log` insert itself, using PR3's canonicalization/digest function — same transaction by construction, no transaction-client plumbing through repositories required.
-3. Migrate `CapabilityOverrideRequestRepository.markApproved`/`markDenied` to call `decide_capability_request` instead of their current direct `UPDATE`s. This is the refactor risk called out in the execution-strategy note above — land it in isolation, confirm the existing `federated-capability-ownership` contract guards still pass unchanged before proceeding.
-4. New `withdraw` endpoint/repository method calling `decide_capability_request(..., 'withdrawn', ...)`, authorized by `caller.id == request.requestedBy` — not department membership.
-5. Blazor: `MyRequests.razor`, listing the caller's own override requests (pending + decided) via PR5's shared DTOs, with a `Withdraw` action on pending rows only.
-6. Contract guard: a direct `UPDATE capability_override_requests SET status = ...` is rejected by DB permissions (real-Postgres test, mirroring ADR-005 Phase 3 task 4's equivalent guard for `activation_status`); `withdraw` succeeds for the requester and fails (403, not a DB error) for anyone else regardless of department/admin status; `markApproved`/`markDenied`'s existing contract guards pass unchanged after the migration to the procedure.
+3. Contract guard: calling `decide_capability_request` directly (e.g. via a raw test query) transitions `status` correctly for all three decisions and writes a matching `audit_log` row; the existing `markApproved`/`markDenied` contract guards still pass unchanged (they don't call the procedure yet, and shouldn't need to).
+
+### PR6b — Migrate markApproved/markDenied to the procedure (Action Item 6, refactor)
+
+**Depends on**: PR6a (the procedure must exist and be verified correct first).
+
+**Objective**: switch the two already-shipped decision paths onto `decide_capability_request`, with `UPDATE` still granted so this PR is revertible on its own if the migration surfaces a regression.
+
+**Tasks**:
+1. Migrate `CapabilityOverrideRequestRepository.markApproved`/`markDenied` to call `decide_capability_request` instead of their current direct `UPDATE`s.
+2. Land this in isolation from unrelated concurrent work — confirm the existing `federated-capability-ownership` contract guards pass unchanged both before starting and after landing, per the execution-strategy note above.
+3. Contract guard: `markApproved`/`markDenied`'s existing contract guards pass unchanged after the migration to the procedure; a test asserting both still work correctly while `UPDATE` remains granted (i.e. this PR does not yet depend on PR6c).
+
+### PR6c — Revoke UPDATE grant (Action Item 6, write-lockdown)
+
+**Depends on**: PR6b (both existing decision paths must already be calling the procedure before direct `UPDATE` is cut off, or they'd break).
+
+**Objective**: the one-way door — make `decide_capability_request` the *only* way `capability_override_requests.status` can change, closing the gap ADR-012 §D identifies (this column has never been DB-enforced, unlike `activation_status`).
+
+**Tasks**:
+1. `REVOKE UPDATE (status, approved_by, approved_by_department, decided_at, denial_reason, withdrawn_at) ON capability_override_requests FROM <app role>`.
+2. Contract guard: a direct `UPDATE capability_override_requests SET status = ...` is rejected by DB permissions (real-Postgres test, mirroring ADR-005 Phase 3 task 4's equivalent guard for `activation_status`); `markApproved`/`markDenied`'s contract guards still pass unchanged now that the grant is gone (proving PR6b's migration was complete — nothing was still relying on direct `UPDATE`).
+
+### PR6d — My Requests view + withdraw endpoint (Action Item 6, net-new)
+
+**Depends on**: PR1 (profile lookup — requester identity), PR6a (the procedure `withdraw` calls). Does not require PR6b or PR6c to function — see the top-level dependency table for why it's still sequenced after them.
+
+**Objective**: the actual new feature — give a requester a way to see and withdraw their own pending requests, closing the "one-way submission into a queue someone else owns" gap ADR-012 §B calls out.
+
+**Tasks**:
+1. New `withdraw` endpoint/repository method calling `decide_capability_request(..., 'withdrawn', ...)`, authorized by `caller.id == request.requestedBy` — not department membership.
+2. Blazor: `MyRequests.razor`, listing the caller's own override requests (pending + decided) via PR5's shared DTOs, with a `Withdraw` action on pending rows only.
+3. Contract guard: `withdraw` succeeds for the requester and fails (403, not a DB error) for anyone else regardless of department/admin status; a withdrawn request no longer appears as an available target for `withdraw` a second time (state check, not just authorization).
 
 ---
 
@@ -157,14 +199,14 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 
 ### PR8 — Visible provenance marker (Action Item 8)
 
-**Depends on**: PR3 (real chain entries to point to); most useful after PR6 (decided/withdrawn rows to demonstrate against), though not a hard technical dependency.
+**Depends on**: PR3 and PR6c (real chain entries to point to, and the lockdown that guarantees every future row has one); most useful after PR6d (decided/withdrawn rows to demonstrate against), though not a hard technical dependency.
 
 **Tasks**:
-1. A small ledger reference (hash-chain position or recorded timestamp) on every row in `Capabilities.razor`, `Approvals.razor`, and `MyRequests.razor` — the UI-side counterpart to ADR-005 Item 6's reconciliation job, now meaningful because PR3/PR6 guarantee every row actually has a chain entry to point to.
+1. A small ledger reference (hash-chain position or recorded timestamp) on every row in `Capabilities.razor`, `Approvals.razor`, and `MyRequests.razor` — the UI-side counterpart to ADR-005 Item 6's reconciliation job, now meaningful because PR3/PR6c guarantee every row actually has a chain entry to point to.
 2. Contract guard: the provenance marker resolves to a real `audit_log` row for a freshly created request, not a placeholder.
 
 ---
 
 ## Sequencing note
 
-PR1, PR2, and PR3 have no dependency on each other but are recommended sequential per the execution-strategy section above. PR4 depends on PR2. PR5 depends on PR1 and PR4. PR6 depends on PR1 and PR3 (not on PR4 or PR5, though it's not useful without a UI to raise requests from). PR7 depends on PR4. PR8 depends on PR3 and is most useful after PR6. Total ordering if run strictly one-at-a-time: **PR1 → PR2 → PR3 → PR4 → PR5 → PR6 → PR7 → PR8** (PR1/PR2/PR3 are mutually reorderable; the rest are not).
+PR1, PR2, and PR3 have no dependency on each other but are recommended sequential per the execution-strategy section above. PR4 depends on PR2. PR5 depends on PR1, PR3, and PR4 — PR3 is a hard content dependency here (ADR-012 §6 requires ledger coverage before any UI write surface ships), not just a risk-driven preference. PR6a depends on PR1 and PR3. PR6b depends on PR6a. PR6c depends on PR6b. PR6d depends on PR1 and PR6a (not on PR6b/PR6c, though it's not useful without a UI to raise requests from, and shares a repository file with them). PR7 depends on PR4. PR8 depends on PR3 and PR6c, and is most useful after PR6d. Total ordering if run strictly one-at-a-time: **PR1 → PR2 → PR3 → PR4 → PR5 → PR6a → PR6b → PR6c → PR6d → PR7 → PR8** (PR1/PR2/PR3 are mutually reorderable; the rest are not).
