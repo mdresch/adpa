@@ -284,6 +284,65 @@ async function main() {
       );
     }
 
+    // --- PR6c: decision-column trigger lockdown (migration 446) ---
+    {
+      const requestId = await createRequest();
+      await expectThrows(
+        client,
+        'REQ-CAP-6C-001: a direct UPDATE of status bypassing the procedure is rejected',
+        () => client.query(`UPDATE capability_override_requests SET status = 'approved' WHERE id = $1`, [requestId]),
+        /decision columns may only be changed via decide_capability_request/
+      );
+    }
+    {
+      const requestId = await createRequest();
+      await expectThrows(
+        client,
+        'REQ-CAP-6C-002: a direct UPDATE of another guarded column (denial_reason) is also rejected',
+        () => client.query(`UPDATE capability_override_requests SET denial_reason = 'sneaking this in' WHERE id = $1`, [requestId]),
+        /decision columns may only be changed via decide_capability_request/
+      );
+    }
+    {
+      const requestId = await createRequest();
+      try {
+        await client.query(`UPDATE capability_override_requests SET justification = 'edited justification' WHERE id = $1`, [
+          requestId
+        ]);
+        const row = await client.query(`SELECT justification FROM capability_override_requests WHERE id = $1`, [requestId]);
+        if (row.rows[0].justification === 'edited justification') {
+          ok('REQ-CAP-6C-003: an UPDATE touching only a non-decision column still succeeds (trigger scoped, not row-wide)');
+        } else {
+          fail('REQ-CAP-6C-003', row.rows[0]);
+        }
+      } catch (error) {
+        fail('REQ-CAP-6C-003: non-decision-column UPDATE unexpectedly rejected', error);
+      }
+    }
+    {
+      // The trigger fires even for UPDATEs issued from inside decide_capability_request
+      // itself (it's a row-level BEFORE UPDATE trigger, not aware of its own caller) --
+      // this is the test that would have caught forgetting to set the guard variable
+      // before the procedure's own UPDATE.
+      const requestId = await createRequest();
+      try {
+        await client.query(`SELECT decide_capability_request($1, 'approved', $2, 'Compliance', $3, $4)`, [
+          requestId,
+          approverId,
+          'still works once the lockdown is active',
+          new Date()
+        ]);
+        const row = await client.query(`SELECT status FROM capability_override_requests WHERE id = $1`, [requestId]);
+        if (row.rows[0].status === 'approved') {
+          ok('REQ-CAP-6C-004: decide_capability_request still works once its own trigger is enforcing');
+        } else {
+          fail('REQ-CAP-6C-004', row.rows[0]);
+        }
+      } catch (error) {
+        fail('REQ-CAP-6C-004: decide_capability_request broke under its own lockdown', error);
+      }
+    }
+
     console.log(`\n${passed} passed, ${failed} failed`);
   } finally {
     await client.query('ROLLBACK');
