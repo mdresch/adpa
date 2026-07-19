@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { insertAuditLogDigest } from './auditLogCoverage';
 import { buildAdminOrActiveDepartmentMemberClause } from './departmentScopedQuery';
 
 export interface CapabilityOverrideRequestRow {
@@ -56,6 +57,12 @@ function mapPendingRow(row: any): PendingOverrideRequestRow {
 export class CapabilityOverrideRequestRepository {
   constructor(private pool: Pool) {}
 
+  /**
+   * ADR-012 Action Item 4: the request insert and its audit_log digest entry
+   * land in one transaction on one client -- a request that exists in this
+   * table but not in the hash chain is exactly the "coverage, not just
+   * integrity" gap this Action Item closes. See auditLogCoverage.ts.
+   */
   async create(params: {
     capabilityId: string;
     requestedNewStatus: string;
@@ -64,21 +71,39 @@ export class CapabilityOverrideRequestRepository {
     requestedBy: string;
     requestedByDepartment: string;
   }): Promise<CapabilityOverrideRequestRow> {
-    const result = await this.pool.query(
-      `INSERT INTO capability_override_requests
-         (capability_id, requested_new_status, draco_verdict_id, justification, requested_by, requested_by_department)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [
-        params.capabilityId,
-        params.requestedNewStatus,
-        params.dracoVerdictId,
-        params.justification,
-        params.requestedBy,
-        params.requestedByDepartment
-      ]
-    );
-    return mapRow(result.rows[0]);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `INSERT INTO capability_override_requests
+           (capability_id, requested_new_status, draco_verdict_id, justification, requested_by, requested_by_department)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [
+          params.capabilityId,
+          params.requestedNewStatus,
+          params.dracoVerdictId,
+          params.justification,
+          params.requestedBy,
+          params.requestedByDepartment
+        ]
+      );
+      const row = result.rows[0];
+      await insertAuditLogDigest(client, {
+        tableName: 'capability_override_requests',
+        rowId: row.id,
+        action: 'create',
+        actorUserId: params.requestedBy,
+        newRow: row
+      });
+      await client.query('COMMIT');
+      return mapRow(row);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async findById(id: string): Promise<CapabilityOverrideRequestRow | null> {
@@ -86,22 +111,90 @@ export class CapabilityOverrideRequestRepository {
     return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
   }
 
+  /**
+   * ADR-012 Action Item 4: same transactional audit coverage as create() -- see
+   * auditLogCoverage.ts. Review finding (PR #742): the original version of this method
+   * read the pre-image with a plain SELECT (no lock) and updated with no expected-status
+   * predicate -- two concurrent decisions on the same request could both read the same
+   * "pending" pre-image, both digest it as the old value, and the second UPDATE would
+   * silently overwrite the first's decision while recording a false old-value digest.
+   * `SELECT ... FOR UPDATE` serializes concurrent decisions on one request row, and the
+   * `AND status = 'pending'` predicate makes the UPDATE itself a no-op (0 rows) if another
+   * transaction already decided it first -- checked via `result.rowCount`, not assumed.
+   */
   async markApproved(id: string, approvedBy: string, approvedByDepartment: string, overrideExpiresAt: Date): Promise<void> {
-    await this.pool.query(
-      `UPDATE capability_override_requests
-       SET status = 'approved', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, override_expires_at = $4
-       WHERE id = $1`,
-      [id, approvedBy, approvedByDepartment, overrideExpiresAt]
-    );
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1 FOR UPDATE`, [id]);
+      if (before.rows.length === 0) {
+        throw new Error(`capability_override_request not found: ${id}`);
+      }
+      const result = await client.query(
+        `UPDATE capability_override_requests
+         SET status = 'approved', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, override_expires_at = $4
+         WHERE id = $1 AND status = 'pending'
+         RETURNING *`,
+        [id, approvedBy, approvedByDepartment, overrideExpiresAt]
+      );
+      if (result.rows.length === 0) {
+        throw new Error(`capability_override_request ${id} has already been decided (status: ${before.rows[0].status})`);
+      }
+      await insertAuditLogDigest(client, {
+        tableName: 'capability_override_requests',
+        rowId: id,
+        action: 'approve',
+        actorUserId: approvedBy,
+        oldRow: before.rows[0],
+        newRow: result.rows[0]
+      });
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
+  /**
+   * ADR-012 Action Item 4: same transactional audit coverage as create() -- see
+   * auditLogCoverage.ts. Same locking/expected-status fix as markApproved above (PR #742
+   * review finding) -- see that method's doc comment for the concurrency reasoning.
+   */
   async markDenied(id: string, deniedBy: string, deniedByDepartment: string, denialReason: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE capability_override_requests
-       SET status = 'denied', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, denial_reason = $4
-       WHERE id = $1`,
-      [id, deniedBy, deniedByDepartment, denialReason]
-    );
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1 FOR UPDATE`, [id]);
+      if (before.rows.length === 0) {
+        throw new Error(`capability_override_request not found: ${id}`);
+      }
+      const result = await client.query(
+        `UPDATE capability_override_requests
+         SET status = 'denied', approved_by = $2, approved_by_department = $3, decided_at = CURRENT_TIMESTAMP, denial_reason = $4
+         WHERE id = $1 AND status = 'pending'
+         RETURNING *`,
+        [id, deniedBy, deniedByDepartment, denialReason]
+      );
+      if (result.rows.length === 0) {
+        throw new Error(`capability_override_request ${id} has already been decided (status: ${before.rows[0].status})`);
+      }
+      await insertAuditLogDigest(client, {
+        tableName: 'capability_override_requests',
+        rowId: id,
+        action: 'deny',
+        actorUserId: deniedBy,
+        oldRow: before.rows[0],
+        newRow: result.rows[0]
+      });
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
