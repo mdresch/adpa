@@ -1,9 +1,9 @@
 -- ADR-012 Action Item 6 (PR6a, additive): adds withdraw support and the
 -- decide_capability_request stored procedure -- the single, eventual writer
 -- of capability_override_requests.status for all three decisions (approved/
--- denied/withdrawn). This migration is purely additive: UPDATE stays granted
--- to the application role until PR6c, and markApproved()/markDenied() keep
--- calling their own direct UPDATEs until PR6b migrates them to this
+-- denied/withdrawn). This migration is purely additive: direct UPDATE is
+-- not yet trigger-guarded (PR6c adds that), and markApproved()/markDenied()
+-- keep calling their own direct UPDATEs until PR6b migrates them to this
 -- procedure. Landing the procedure now, unused, lets PR6b/PR6c be small,
 -- reviewable, single-purpose changes instead of one large one.
 
@@ -20,11 +20,11 @@ ALTER TABLE public.capability_override_requests
     CHECK (status IN ('pending', 'approved', 'denied', 'withdrawn')),
   ADD COLUMN IF NOT EXISTS withdrawn_at timestamptz;
 
--- SECURITY DEFINER so this still works once PR6c revokes UPDATE from the
--- application role (a plain, non-SECURITY-DEFINER function would inherit
--- the caller's own privileges and fail the same way a bare UPDATE would).
--- search_path is pinned to prevent search_path hijacking, standard practice
--- for any SECURITY DEFINER function.
+-- SECURITY DEFINER so this still works once PR6c's trigger guard blocks
+-- direct UPDATEs from the application role (a plain, non-SECURITY-DEFINER
+-- function would inherit the caller's own privileges and be blocked by
+-- that same trigger). search_path is pinned to prevent search_path
+-- hijacking, standard practice for any SECURITY DEFINER function.
 CREATE OR REPLACE FUNCTION public.decide_capability_request(
   p_request_id uuid,
   p_decision varchar(20),
@@ -40,11 +40,16 @@ AS $$
 DECLARE
   v_row public.capability_override_requests%ROWTYPE;
   v_portfolio_id uuid;
+  v_functional_owner_department varchar(50);
   v_is_member boolean;
   v_digest_old text;
   v_digest_new text;
 BEGIN
-  IF p_decision NOT IN ('approved', 'denied', 'withdrawn') THEN
+  -- Review finding (PR #745): `p_decision NOT IN (...)` evaluates to NULL (not TRUE)
+  -- when p_decision IS NULL, so this guard silently did not fire for a NULL decision --
+  -- execution fell through to the final ELSE branch below and treated a NULL decision
+  -- as 'withdrawn'. Explicit NULL check first.
+  IF p_decision IS NULL OR p_decision NOT IN ('approved', 'denied', 'withdrawn') THEN
     RAISE EXCEPTION 'decide_capability_request: invalid decision %', p_decision;
   END IF;
 
@@ -73,13 +78,29 @@ BEGIN
       RAISE EXCEPTION 'the approver/denier must be a different person from the requester';
     END IF;
 
+    -- Review finding (PR #745): the original check verified active membership in
+    -- p_decided_by_department -- whatever department the CALLER claimed -- rather than
+    -- the capability's own functional_owner_department. A member of an unrelated
+    -- department could pass their own department and be treated as a valid approver
+    -- for a request that has nothing to do with it. Resolve the capability's real
+    -- owning department here and require both the caller's claim to match it AND an
+    -- active membership in it -- the "defense in depth" this procedure exists to add
+    -- has to bind to the actual authorization boundary, not merely trust an argument.
+    SELECT functional_owner_department INTO v_functional_owner_department
+    FROM public.capability_registry WHERE id = v_row.capability_id;
+
+    IF v_functional_owner_department IS DISTINCT FROM p_decided_by_department THEN
+      RAISE EXCEPTION 'decided_by_department % does not match this capability''s functional owner department %',
+        p_decided_by_department, v_functional_owner_department;
+    END IF;
+
     SELECT EXISTS (
       SELECT 1 FROM public.user_departments
       WHERE user_id = p_decided_by AND portfolio_id = v_portfolio_id
-        AND department = p_decided_by_department AND is_active = true
+        AND department = v_functional_owner_department AND is_active = true
     ) INTO v_is_member;
     IF NOT v_is_member THEN
-      RAISE EXCEPTION 'decided_by has no active member in portfolio % department %', v_portfolio_id, p_decided_by_department;
+      RAISE EXCEPTION 'decided_by has no active member in portfolio % department %', v_portfolio_id, v_functional_owner_department;
     END IF;
   END IF;
 

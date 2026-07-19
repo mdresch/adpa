@@ -147,25 +147,52 @@ export class CapabilityOverrideExceptionRepository {
    * The AFTER UPDATE OF decision trigger (migration 441) handles the disable+status
    * consequence on decline. ADR-012 Action Item 4: this update and its audit_log digest
    * entry now land in one transaction, same coverage as the request-side repository --
-   * see auditLogCoverage.ts. actorUserId is the review's own reviewer_user_id (the
-   * caller who may legitimately act on it is already enforced upstream by the
-   * controller; this just records who).
+   * see auditLogCoverage.ts.
+   *
+   * `decidedBy` (review finding, PR #742/#744): the *authenticated caller*, not the
+   * review's own `reviewer_user_id`. Those diverge for the external_auditor category --
+   * `reviewer_user_id` is normally NULL there (external_auditor has no ADPA account;
+   * buildReviewerSet.ts:41-42), and CapabilityOverrideExceptionController.decide permits
+   * an active Internal Audit member to record that decision on their behalf. Recording
+   * `reviewer_user_id` as the audit actor would therefore log the proxy decision as NULL
+   * -- losing the one piece of information ("who actually clicked decide") the ledger
+   * exists to preserve. The caller passes the real actor explicitly; this method no
+   * longer infers it from the row.
+   *
+   * Also adds `FOR UPDATE` + an expected-state predicate on the UPDATE (same concurrency
+   * fix as CapabilityOverrideRequestRepository.markApproved/markDenied, same finding
+   * class) -- two concurrent decisions on one review could otherwise both digest the same
+   * "undecided" pre-image and the second write would silently overwrite the first.
    */
-  async decideReview(id: string, decision: 'approved' | 'declined', notes: string | null): Promise<OverrideExceptionReviewRow> {
+  async decideReview(
+    id: string,
+    decision: 'approved' | 'declined',
+    notes: string | null,
+    decidedBy: string
+  ): Promise<OverrideExceptionReviewRow> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const before = await client.query(`SELECT * FROM override_exception_reviews WHERE id = $1`, [id]);
+      const before = await client.query(`SELECT * FROM override_exception_reviews WHERE id = $1 FOR UPDATE`, [id]);
+      if (before.rows.length === 0) {
+        throw new Error(`override_exception_review not found: ${id}`);
+      }
       const result = await client.query(
-        `UPDATE override_exception_reviews SET decision = $2, decided_at = CURRENT_TIMESTAMP, notes = $3 WHERE id = $1 RETURNING *`,
+        `UPDATE override_exception_reviews
+         SET decision = $2, decided_at = CURRENT_TIMESTAMP, notes = $3
+         WHERE id = $1 AND decision IS NULL
+         RETURNING *`,
         [id, decision, notes]
       );
+      if (result.rows.length === 0) {
+        throw new Error(`override_exception_review ${id} has already been decided (decision: ${before.rows[0].decision})`);
+      }
       const row = result.rows[0];
       await insertAuditLogDigest(client, {
         tableName: 'override_exception_reviews',
         rowId: id,
         action: decision,
-        actorUserId: row?.reviewer_user_id ?? null,
+        actorUserId: decidedBy,
         oldRow: before.rows[0],
         newRow: row
       });
