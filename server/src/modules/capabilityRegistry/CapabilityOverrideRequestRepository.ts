@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { buildAdminOrActiveDepartmentMemberClause } from './departmentScopedQuery';
 import { insertAuditLogDigest } from './auditLogCoverage';
 
 export interface CapabilityOverrideRequestRow {
@@ -130,6 +131,13 @@ export class CapabilityOverrideRequestRepository {
    * here so both writes commit or roll back together; a bare `repo.markApproved(...)`
    * with no fifth argument still works standalone (falls back to `this.pool`, its own
    * implicit transaction) for any caller that doesn't need cross-statement atomicity.
+   *
+   * (PR5's independent copy of this same fix -- markApproved's own transactional
+   * SELECT/UPDATE shape with an `externalClient` parameter -- is superseded here, not
+   * lost: PR6b already replaced that shape entirely with delegation to
+   * `decide_capability_request`, which has its own `FOR UPDATE`/`status <> 'pending'`
+   * protection one layer deeper. See PR5's own commit for why it needed an independent
+   * fix in the first place: that branch doesn't descend from PR6a/PR6b.)
    */
   async markApproved(
     id: string,
@@ -180,16 +188,16 @@ export class CapabilityOverrideRequestRepository {
    * department name alone" rule).
    */
   async listPendingForUser(userId: string, isAdmin: boolean): Promise<PendingOverrideRequestRow[]> {
+    const scopeClause = buildAdminOrActiveDepartmentMemberClause({
+      portfolioColumn: 'cr.portfolio_id',
+      departmentColumn: 'r.requested_by_department'
+    });
     const result = await this.pool.query(
       `SELECT r.*, cr.module_id, cr.portfolio_id
        FROM capability_override_requests r
        JOIN capability_registry cr ON cr.id = r.capability_id
        WHERE r.status = 'pending'
-         AND ($1::boolean = true OR EXISTS (
-           SELECT 1 FROM user_departments ud
-           WHERE ud.user_id = $2 AND ud.portfolio_id = cr.portfolio_id
-             AND ud.department = r.requested_by_department AND ud.is_active = true
-         ))
+         AND ${scopeClause}
        ORDER BY r.requested_at ASC`,
       [isAdmin, userId]
     );

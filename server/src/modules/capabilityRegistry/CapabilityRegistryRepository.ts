@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { childLogger } from '../../utils/logger';
 import { CapabilityRegistryRow, CapabilityRegistryRowInsert } from './capabilityRegistryReconciliation';
+import { buildAdminOrActiveDepartmentMemberClause } from './departmentScopedQuery';
 
 export interface CapabilityRegistryDbRow {
   moduleId: string;
@@ -88,6 +89,41 @@ export class CapabilityRegistryRepository {
       controlDefinitionOwnerDepartment: row.control_definition_owner_department,
       activationStatus: row.activation_status
     };
+  }
+
+  /**
+   * ADR-012 Action Item 3: the Governor Portal Capability Register page's data source —
+   * the first human-browsable listing of capability_registry (listAll below is
+   * reconciliation-only, unfiltered, and returns just module_id/portfolio_id). Scoped by
+   * the capability's own functional_owner_department via PR2's shared clause, the same
+   * "admin sees all / member sees own active department" decision `overrides/pending`
+   * already applies — never by joining capability_override_requests, which would make a
+   * capability with zero pending requests invisible to its own department (the exact
+   * predicate divergence ADR-012 §A calls out).
+   */
+  async listForUser(userId: string, isAdmin: boolean): Promise<CapabilityRegistryFullRow[]> {
+    const scopeClause = buildAdminOrActiveDepartmentMemberClause({
+      portfolioColumn: 'cr.portfolio_id',
+      departmentColumn: 'cr.functional_owner_department'
+    });
+    const result = await this.pool.query(
+      `SELECT cr.id, cr.module_id, cr.portfolio_id, cr.platform_operator, cr.functional_owner_type,
+              cr.functional_owner_department, cr.control_definition_owner_department, cr.activation_status
+       FROM capability_registry cr
+       WHERE ${scopeClause}
+       ORDER BY cr.module_id, cr.portfolio_id`,
+      [isAdmin, userId]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      moduleId: row.module_id,
+      portfolioId: row.portfolio_id,
+      platformOperator: row.platform_operator,
+      functionalOwnerType: row.functional_owner_type,
+      functionalOwnerDepartment: row.functional_owner_department,
+      controlDefinitionOwnerDepartment: row.control_definition_owner_department,
+      activationStatus: row.activation_status
+    }));
   }
 
   /**

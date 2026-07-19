@@ -21,6 +21,11 @@ const capabilityOverrideException = new CapabilityOverrideExceptionController();
 router.get('/overrides/pending', authenticateToken, capabilityOverride.listPending);
 router.get('/exceptions/pending', authenticateToken, capabilityOverrideException.listPending);
 
+// ADR-012 Action Item 3: the Governor Portal's Capability Register page. A 0-segment
+// path, so no ordering conflict with the 2-segment routes above/below it -- grouped
+// here anyway since it's the other authenticated, human-facing list route.
+router.get('/', authenticateToken, capabilityRegistry.listForUser);
+
 // Internal, service-to-service only (consumed by the .NET orchestrator's TaskApprovalGate,
 // ADR-005 Phase 2) — deliberately unauthenticated, see CapabilityRegistryController's own docs.
 router.get('/:moduleId/:portfolioId', capabilityRegistry.getByModuleAndPortfolio);
