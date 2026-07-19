@@ -194,7 +194,7 @@ Action Item 6 covers giving a request a full lifecycle (raise → pending → de
 
 **Tasks**:
 1. Read-only capability-status view in `app/`, calling PR4's `GET /api/v1/capability-registry` directly through the existing `/api/*` Next.js proxy (no new backend plumbing, no bearer-token relay reimplemented — ADR-012 §C).
-2. Deep-links to `/capabilities/{moduleId}/{portfolioId}` in the Governor Portal for any write action; no action buttons of its own.
+2. Deep-links to the Governor Portal for any write action; no action buttons of its own. **Correction (caught during implementation)**: the plan originally specified `/capabilities/{moduleId}/{portfolioId}` as the link target, but no such per-capability route exists — `Capabilities.razor` is mounted only at the flat `/capabilities` list route (§ confirmed against the file's own `@page` directive), and this task's own framing ("no new backend plumbing") scopes PR7 to the Next.js side only. Linking to the existing `/capabilities` list is what's actually implementable without adding orchestrator routing out of this PR's scope; a true per-row deep link is future work if it's ever wanted, not something PR7 silently assumes into existence.
 3. Contract guard: the view renders with zero write-capable elements (a lint/test asserting no `POST`/`PUT`/`PATCH` call originates from that view's code).
 
 ### PR8 — Visible provenance marker (Action Item 8)
