@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { ReviewerCandidate } from './buildReviewerSet';
+import { insertAuditLogDigest } from './auditLogCoverage';
 
 export interface CapabilityOverrideExceptionRow {
   id: string;
@@ -74,6 +75,7 @@ function mapReview(row: any): OverrideExceptionReviewRow {
 export class CapabilityOverrideExceptionRepository {
   constructor(private pool: Pool) {}
 
+  /** ADR-012 Action Item 4: same transactional audit coverage as CapabilityOverrideRequestRepository.create() -- see auditLogCoverage.ts. */
   async createException(params: {
     capabilityId: string;
     requestedNewStatus: string;
@@ -81,14 +83,32 @@ export class CapabilityOverrideExceptionRepository {
     justification: string;
     raisedBy: string;
   }): Promise<CapabilityOverrideExceptionRow> {
-    const result = await this.pool.query(
-      `INSERT INTO capability_override_exceptions
-         (capability_id, requested_new_status, draco_verdict_id, justification, raised_by)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [params.capabilityId, params.requestedNewStatus, params.dracoVerdictId, params.justification, params.raisedBy]
-    );
-    return mapException(result.rows[0]);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `INSERT INTO capability_override_exceptions
+           (capability_id, requested_new_status, draco_verdict_id, justification, raised_by)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [params.capabilityId, params.requestedNewStatus, params.dracoVerdictId, params.justification, params.raisedBy]
+      );
+      const row = result.rows[0];
+      await insertAuditLogDigest(client, {
+        tableName: 'capability_override_exceptions',
+        rowId: row.id,
+        action: 'create',
+        actorUserId: params.raisedBy,
+        newRow: row
+      });
+      await client.query('COMMIT');
+      return mapException(row);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async addReviewers(exceptionId: string, reviewers: ReviewerCandidate[]): Promise<OverrideExceptionReviewRow[]> {
@@ -123,13 +143,67 @@ export class CapabilityOverrideExceptionRepository {
     return result.rows.length > 0 ? mapReview(result.rows[0]) : null;
   }
 
-  /** The AFTER UPDATE OF decision trigger (migration 441) handles the disable+status consequence on decline. */
-  async decideReview(id: string, decision: 'approved' | 'declined', notes: string | null): Promise<OverrideExceptionReviewRow> {
-    const result = await this.pool.query(
-      `UPDATE override_exception_reviews SET decision = $2, decided_at = CURRENT_TIMESTAMP, notes = $3 WHERE id = $1 RETURNING *`,
-      [id, decision, notes]
-    );
-    return mapReview(result.rows[0]);
+  /**
+   * The AFTER UPDATE OF decision trigger (migration 441) handles the disable+status
+   * consequence on decline. ADR-012 Action Item 4: this update and its audit_log digest
+   * entry now land in one transaction, same coverage as the request-side repository --
+   * see auditLogCoverage.ts.
+   *
+   * `decidedBy` (review finding, PR #742/#744): the *authenticated caller*, not the
+   * review's own `reviewer_user_id`. Those diverge for the external_auditor category --
+   * `reviewer_user_id` is normally NULL there (external_auditor has no ADPA account;
+   * buildReviewerSet.ts:41-42), and CapabilityOverrideExceptionController.decide permits
+   * an active Internal Audit member to record that decision on their behalf. Recording
+   * `reviewer_user_id` as the audit actor would therefore log the proxy decision as NULL
+   * -- losing the one piece of information ("who actually clicked decide") the ledger
+   * exists to preserve. The caller passes the real actor explicitly; this method no
+   * longer infers it from the row.
+   *
+   * Also adds `FOR UPDATE` + an expected-state predicate on the UPDATE (same concurrency
+   * fix as CapabilityOverrideRequestRepository.markApproved/markDenied, same finding
+   * class) -- two concurrent decisions on one review could otherwise both digest the same
+   * "undecided" pre-image and the second write would silently overwrite the first.
+   */
+  async decideReview(
+    id: string,
+    decision: 'approved' | 'declined',
+    notes: string | null,
+    decidedBy: string
+  ): Promise<OverrideExceptionReviewRow> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const before = await client.query(`SELECT * FROM override_exception_reviews WHERE id = $1 FOR UPDATE`, [id]);
+      if (before.rows.length === 0) {
+        throw new Error(`override_exception_review not found: ${id}`);
+      }
+      const result = await client.query(
+        `UPDATE override_exception_reviews
+         SET decision = $2, decided_at = CURRENT_TIMESTAMP, notes = $3
+         WHERE id = $1 AND decision IS NULL
+         RETURNING *`,
+        [id, decision, notes]
+      );
+      if (result.rows.length === 0) {
+        throw new Error(`override_exception_review ${id} has already been decided (decision: ${before.rows[0].decision})`);
+      }
+      const row = result.rows[0];
+      await insertAuditLogDigest(client, {
+        tableName: 'override_exception_reviews',
+        rowId: id,
+        action: decision,
+        actorUserId: decidedBy,
+        oldRow: before.rows[0],
+        newRow: row
+      });
+      await client.query('COMMIT');
+      return mapReview(row);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async markActivated(exceptionId: string, activatedBy: string): Promise<void> {

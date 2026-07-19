@@ -3,7 +3,6 @@
 @inject IHttpClientFactory HttpClientFactory
 @using System.Net.Http.Json
 @using System.Text.Json
-@using System.Text.Json.Serialization
 
 <PageTitle>Approvals — Governor Portal</PageTitle>
 
@@ -201,43 +200,7 @@ else
 
     private static string Shorten(string id) => id.Length > 8 ? $"{id[..8]}…" : id;
 
-    private sealed class PendingOverridesResponse
-    {
-        [JsonPropertyName("overrideRequests")] public List<PendingOverride> OverrideRequests { get; set; } = new();
-    }
-
-    private sealed class PendingOverride
-    {
-        [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
-        [JsonPropertyName("moduleId")] public string ModuleId { get; set; } = string.Empty;
-        [JsonPropertyName("portfolioId")] public string PortfolioId { get; set; } = string.Empty;
-        [JsonPropertyName("requestedNewStatus")] public string RequestedNewStatus { get; set; } = string.Empty;
-        [JsonPropertyName("justification")] public string Justification { get; set; } = string.Empty;
-        [JsonPropertyName("requestedByDepartment")] public string RequestedByDepartment { get; set; } = string.Empty;
-        [JsonPropertyName("requestedAt")] public DateTimeOffset RequestedAt { get; set; }
-    }
-
-    private sealed class PendingExceptionsResponse
-    {
-        [JsonPropertyName("exceptions")] public List<PendingException> Exceptions { get; set; } = new();
-    }
-
-    private sealed class PendingException
-    {
-        [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
-        [JsonPropertyName("moduleId")] public string ModuleId { get; set; } = string.Empty;
-        [JsonPropertyName("portfolioId")] public string PortfolioId { get; set; } = string.Empty;
-        [JsonPropertyName("requestedNewStatus")] public string RequestedNewStatus { get; set; } = string.Empty;
-        [JsonPropertyName("justification")] public string Justification { get; set; } = string.Empty;
-        [JsonPropertyName("raisedAt")] public DateTimeOffset RaisedAt { get; set; }
-        [JsonPropertyName("reviews")] public List<ExceptionReview> Reviews { get; set; } = new();
-    }
-
-    private sealed class ExceptionReview
-    {
-        [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
-        [JsonPropertyName("reviewerCategory")] public string ReviewerCategory { get; set; } = string.Empty;
-        [JsonPropertyName("reviewerLabel")] public string? ReviewerLabel { get; set; }
-        [JsonPropertyName("decision")] public string? Decision { get; set; }
-    }
+    // ADR-012 PR5: PendingOverride/PendingException/ExceptionReview moved to
+    // Adpa.Web.Models.CapabilityRequests (globally imported via _Imports.razor) so
+    // Capabilities.razor and (PR6) MyRequests.razor can reference the same shapes.
 }
