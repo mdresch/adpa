@@ -65,12 +65,14 @@ If parallelism is wanted anyway, the only safe split is PR1/PR2/PR3 *with an exp
 
 ### PR2 — Extract shared admin/member scoping helper (Action Item 2)
 
-**Objective**: one place decides "admin/super_admin sees everything; a plain user sees only their own active `functional_owner_department`/`requested_by_department` membership" — today duplicated between `CapabilityOverrideController.listPending` and `CapabilityOverrideExceptionController.listPending`, about to become a third copy in PR4.
+**Correction (2026-07-17, verified against the actual repositories):** an earlier draft of this plan (and of ADR-012 §A/§6 Item 2) asserted the admin-sees-all/member-sees-own-department predicate is duplicated across *both* `CapabilityOverrideController.listPending` and `CapabilityOverrideExceptionController.listPending`. It is not. `CapabilityOverrideExceptionRepository.listPendingForUser`'s non-admin branch authorizes by **named-reviewer-assignment** (`EXISTS (... override_exception_reviews rev WHERE rev.reviewer_user_id = $2 AND rev.decision IS NULL)`) — a different table, a different mechanism, no department check at all — matching its own doc comment ("a plain user sees only exceptions where THEY are a named reviewer... matches `decideReview`'s own authorization"). Only `CapabilityOverrideRequestRepository.listPendingForUser` genuinely shares the admin-sees-all/department-membership predicate this PR extracts. See ADR-012 §A's matching correction.
+
+**Objective**: one place decides "admin/super_admin sees everything; a plain user sees only their own active department membership" — today implemented once, correctly, in `CapabilityOverrideRequestRepository.listPendingForUser`, about to become a second, easily-drifting copy in PR4's new capability-registry list endpoint. `CapabilityOverrideExceptionController.listPending` is not a consumer of this helper — its reviewer-assignment authorization is a distinct, already-correct concern this PR does not touch.
 
 **Tasks**:
-1. Extract the scoping predicate into one shared repository helper (e.g. `DepartmentScopedQuery` or a shared SQL fragment builder), consumed by both existing `listPending` methods with no behavior change — this task's contract guard is the existing test suite passing unchanged.
-2. Name the canonical scoping column explicitly: `functional_owner_department` (on `capability_registry`, joined by `portfolio_id`) for anything scoping *capabilities*; `requested_by_department` (on the request row itself) for anything scoping *requests*. These usually agree but are not the same predicate (see ADR-012 §A) — the helper takes the column as a parameter rather than assuming one.
-3. Contract guard: existing `overrides/pending`/`exceptions/pending` scoping tests pass unchanged after extraction; a new test asserts the helper's admin-sees-all and member-sees-own-department branches directly, independent of either controller.
+1. Extract the scoping predicate into one shared repository helper (e.g. `DepartmentScopedQuery` or a shared SQL fragment builder), consumed by `CapabilityOverrideRequestRepository.listPendingForUser` with no behavior change — this task's contract guard is the existing test suite passing unchanged. `CapabilityOverrideExceptionRepository.listPendingForUser` is left as-is.
+2. Name the canonical scoping column explicitly: `functional_owner_department` (on `capability_registry`, joined by `portfolio_id`) for anything scoping *capabilities* (PR4's consumer); `requested_by_department` (on the request row itself) for anything scoping *requests* (this PR's consumer, `listPendingForUser`). These usually agree but are not the same predicate (see ADR-012 §A) — the helper takes the column as a parameter rather than assuming one.
+3. Contract guard: the existing `overrides/pending` scoping test passes unchanged after extraction; a new test asserts the helper's admin-sees-all and member-sees-own-department branches directly, independent of the controller. `exceptions/pending`'s existing tests are untouched by this PR (no code path of theirs changes).
 
 ### PR3 — Retroactive audit_log hash-chain coverage (Action Item 4)
 
@@ -199,7 +201,7 @@ Action Item 6 covers giving a request a full lifecycle (raise → pending → de
 
 **Tasks**:
 1. Read-only capability-status view in `app/`, calling PR4's `GET /api/v1/capability-registry` directly through the existing `/api/*` Next.js proxy (no new backend plumbing, no bearer-token relay reimplemented — ADR-012 §C).
-2. Deep-links to `/capabilities/{moduleId}/{portfolioId}` in the Governor Portal for any write action; no action buttons of its own.
+2. Deep-links to the Governor Portal for any write action; no action buttons of its own. **Correction (caught during implementation)**: the plan originally specified `/capabilities/{moduleId}/{portfolioId}` as the link target, but no such per-capability route exists — `Capabilities.razor` is mounted only at the flat `/capabilities` list route (§ confirmed against the file's own `@page` directive), and this task's own framing ("no new backend plumbing") scopes PR7 to the Next.js side only. Linking to the existing `/capabilities` list is what's actually implementable without adding orchestrator routing out of this PR's scope; a true per-row deep link is future work if it's ever wanted, not something PR7 silently assumes into existence.
 3. Contract guard: the view renders with zero write-capable elements (a lint/test asserting no `POST`/`PUT`/`PATCH` call originates from that view's code).
 
 ### PR8 — Visible provenance marker (Action Item 8)
