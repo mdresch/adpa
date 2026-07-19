@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
+import { buildAdminOrActiveDepartmentMemberClause } from './departmentScopedQuery';
 import { insertAuditLogDigest } from './auditLogCoverage';
 
 export interface CapabilityOverrideRequestRow {
@@ -120,11 +121,28 @@ export class CapabilityOverrideRequestRepository {
    * `SELECT ... FOR UPDATE` serializes concurrent decisions on one request row, and the
    * `AND status = 'pending'` predicate makes the UPDATE itself a no-op (0 rows) if another
    * transaction already decided it first -- checked via `result.rowCount`, not assumed.
+   *
+   * Optional `externalClient` (review finding, PR #742/#744): `CapabilityOverrideController
+   * .approve` calls `promote_capability_status` and this method as two separate autocommit
+   * statements. If this call fails after the capability was already promoted, or a
+   * concurrent decision races between the two calls, the capability transition and the
+   * request's own status can disagree. When a caller passes an existing client, this
+   * method participates in that caller's transaction (no `BEGIN`/`COMMIT`/`ROLLBACK`/
+   * `release` of its own) instead of opening a new one -- letting the controller wrap
+   * both statements atomically. Called with no fifth argument, it behaves exactly as
+   * before: its own connection, its own transaction, its own release.
    */
-  async markApproved(id: string, approvedBy: string, approvedByDepartment: string, overrideExpiresAt: Date): Promise<void> {
-    const client = await this.pool.connect();
+  async markApproved(
+    id: string,
+    approvedBy: string,
+    approvedByDepartment: string,
+    overrideExpiresAt: Date,
+    externalClient?: PoolClient
+  ): Promise<void> {
+    const client = externalClient ?? (await this.pool.connect());
+    const ownsTransaction = !externalClient;
     try {
-      await client.query('BEGIN');
+      if (ownsTransaction) await client.query('BEGIN');
       const before = await client.query(`SELECT * FROM capability_override_requests WHERE id = $1 FOR UPDATE`, [id]);
       if (before.rows.length === 0) {
         throw new Error(`capability_override_request not found: ${id}`);
@@ -147,12 +165,12 @@ export class CapabilityOverrideRequestRepository {
         oldRow: before.rows[0],
         newRow: result.rows[0]
       });
-      await client.query('COMMIT');
+      if (ownsTransaction) await client.query('COMMIT');
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (ownsTransaction) await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      if (ownsTransaction) client.release();
     }
   }
 
@@ -220,16 +238,16 @@ export class CapabilityOverrideRequestRepository {
    * department name alone" rule).
    */
   async listPendingForUser(userId: string, isAdmin: boolean): Promise<PendingOverrideRequestRow[]> {
+    const scopeClause = buildAdminOrActiveDepartmentMemberClause({
+      portfolioColumn: 'cr.portfolio_id',
+      departmentColumn: 'r.requested_by_department'
+    });
     const result = await this.pool.query(
       `SELECT r.*, cr.module_id, cr.portfolio_id
        FROM capability_override_requests r
        JOIN capability_registry cr ON cr.id = r.capability_id
        WHERE r.status = 'pending'
-         AND ($1::boolean = true OR EXISTS (
-           SELECT 1 FROM user_departments ud
-           WHERE ud.user_id = $2 AND ud.portfolio_id = cr.portfolio_id
-             AND ud.department = r.requested_by_department AND ud.is_active = true
-         ))
+         AND ${scopeClause}
        ORDER BY r.requested_at ASC`,
       [isAdmin, userId]
     );

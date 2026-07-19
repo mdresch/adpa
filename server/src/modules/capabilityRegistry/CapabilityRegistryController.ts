@@ -18,6 +18,25 @@ export class CapabilityRegistryController {
   private userDepartments = new UserDepartmentRepository(pool);
   private logger = childLogger({ component: 'CapabilityRegistryController' });
 
+  /**
+   * ADR-012 Action Item 3: authenticated, human-facing — the Governor Portal's new
+   * Capability Register anchor page. Scoped the same way `overrides/pending` already is
+   * (admin sees every capability; a plain user sees only capabilities whose
+   * functional_owner_department they're an active member of, in that portfolio).
+   */
+  listForUser = async (req: Request, res: Response) => {
+    try {
+      const requester = (req as any).user;
+      const requesterRole = requester?.role?.toLowerCase();
+      const isAdmin = requesterRole === 'admin' || requesterRole === 'super_admin';
+      const capabilities = await this.repository.listForUser(requester.id, isAdmin);
+      res.json({ capabilities });
+    } catch (error) {
+      this.logger.error('List capability registry error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
   getByModuleAndPortfolio = async (req: Request, res: Response) => {
     try {
       const { moduleId, portfolioId } = req.params;
