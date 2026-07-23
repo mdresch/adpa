@@ -81,15 +81,15 @@ Where `▓` = ADR covers this pillar, `░` = no coverage.
 
 | Priority | Pillar | Why It Matters |
 |---|---|---|
-| **Critical** | P1 — Document Generation Pipeline | The central feature of ADPA. The multi-stage processor (context gathering → template processing → AI generation → QA → output formatting → cascading regeneration) has a 98K-line implementation but no architectural record of the pipeline design itself. |
-| **Critical** | P2 — Context & Knowledge Management | Ten modules (`contextGathering`, `contextOrchestrator`, `contextBundle`, `contextInjection`, `contextRetrieval`, `contextFreshness`, `contextRepository`, `contextAccessControl`, `variableResolution`, `contextGathering`) implement a full context pipeline feeding the document generator. No ADR explains why each exists, how they interact, or the freshness/access-control trade-offs. |
+| **Critical** | P1 — Document Generation Pipeline | The central feature of ADPA. The multi-stage processor (context gathering → template processing → AI generation → QA → output formatting → cascading regeneration) has an ~10.7K-line implementation (`multiStageDocumentProcessor/`) but no architectural record of the pipeline design itself. |
+| **Critical** | P2 — Context & Knowledge Management | Ten modules (`context`, `contextGathering`, `contextOrchestrator`, `contextBundle`, `contextInjection`, `contextRetrieval`, `contextFreshness`, `contextRepository`, `contextAccessControl`, `variableResolution`) implement a full context pipeline feeding the document generator. No ADR explains why each exists, how they interact, or the freshness/access-control trade-offs. |
 | **Critical** | P3 — Entity Extraction & Knowledge Graph | H8 entity inline extraction, dual-store Neo4j/PostgreSQL transactional atomicity, entity matching, entity freshness, and template analytics profiling are core differentiating features. No ADR. |
 | **High** | P5 — AI Provider Strategy (beyond xAI) | ADR-007 covers xAI exclusively. The `ai/` module has adapters for OpenAI, Google, Mistral, Ollama, Azure, and Copilot with a `FallbackExecutor`. That multi-provider failover, cost optimization, and provider selection model is undocumented at the ADR level. |
 | **High** | P16 — Queue & Async Processing | Bull/Redis queues, `AIGenerationJobService`, `jobManager`, parallel AI processing, and the `StuckJobMonitor` drive the entire async pipeline. No ADR. |
 | **High** | P15 — Multi-tenancy & Portfolio Architecture | Portfolio isolation, resource capacity, project hierarchy, and the `portfolioDomains` system are load-bearing for every other tier yet have no architectural record. |
 | **High** | P6 — Template Lifecycle & Template Management | The template state machine (`template-lifecycle`), quality regression detection, template health tracking, and system prompt optimization have governed-features tests but no ADR. |
 | **Medium** | P9 — Compliance (beyond DRACO/capability) | BPMS governance rulesets, EU AI Act scoring, PMBOK/BABOK/DMBOK compliance alignment are implemented (`compliance/` module with `babokRuleset`, `pmbokRuleset`, `dmbokRuleset`) but ADR-004 covers DRACO only. |
-| **Medium** | P10 — Morphic AI Chat | The Morphic AI chat experience (`morphic/` frontend module, streaming, citations, KaTeX, artifacts) is a primary user-facing feature with no architectural record. |
+| **Medium** | P10 — Morphic AI Chat | The Morphic AI chat experience (`server/src/modules/morphic/` backend module with frontend pieces in `components/morphic/`, `lib/morphic/`, and `app/api/morphic/`) is a primary user-facing feature with no architectural record. |
 | **Medium** | P13 — Integration Ecosystem | The README lists Confluence OAuth2, SharePoint, GitHub, and Adobe Document Services as differentiators. The `integrations/` module exists. No ADR. |
 | **Medium** | P14 — Infrastructure & Deployment | API/Worker split, lazy Puppeteer, Langfuse telemetry restrictions are governed-features-governed but not ADR'd. |
 | **Medium** | P17 — Drift & Cascading Regeneration | `document-dependency-graph`, `cascading-regeneration`, and the `drift/` UI are visible features with no ADR. |
@@ -107,7 +107,7 @@ Where `▓` = ADR covers this pillar, `░` = no coverage.
 **ADR-013: Document Generation Pipeline Architecture**
 
 - **Pillar:** P1
-- **Why:** The central feature of ADPA. The multi-stage processor (stages: context gathering → template processing → AI generation → quality assurance → output formatting → cascading regeneration) has a full implementation (`multiStageDocumentProcessor/`, 98K+ lines across stages, engines, services) but no architectural record explaining the pipeline design, stage contracts, error propagation, or the rationale for the specific stage ordering. Every developer working on doc-gen currently reverse-engineers this from the code.
+- **Why:** The central feature of ADPA. The multi-stage processor (stages: context gathering → template processing → AI generation → quality assurance → output formatting → cascading regeneration) has a full implementation (`multiStageDocumentProcessor/`, ~10.7K lines across stages, engines, services) but no architectural record explaining the pipeline design, stage contracts, error propagation, or the rationale for the specific stage ordering. Every developer working on doc-gen currently reverse-engineers this from the code.
 - **Scope:** Define the canonical pipeline shape, stage contracts, abort/retry semantics, stage-output schema, and the decision to keep doc generation Markdown-only (JSONB in Postgres, PDF/DOCX export only on demand).
 
 **ADR-014: Context & Knowledge Management Framework**
@@ -190,7 +190,7 @@ Where `▓` = ADR covers this pillar, `░` = no coverage.
 | Existing ADRs | 10 |
 | Pillars with at least one ADR | 10 of 20 |
 | Pillars with zero ADR coverage | 10 of 20 |
-| Modules (`server/src/modules/*`) with no ADR coverage | ~30 of ~45 |
+| Modules (`server/src/modules/*`) with no ADR coverage | ~28 of 51 |
 
 ### The biggest risk: P1 and P2 have zero ADR coverage
 

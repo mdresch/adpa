@@ -76,7 +76,7 @@ No route is allowed to perform inline `if (user.role === 'admin')` after this AD
 | Flexibility | Low — every new resource requires a new role |
 | Maintenance | High — role proliferation as features grow |
 
-Rejected: the permission map already exists and scales better than role proliferation. ADPA has 45+ server modules; a role-only model would require ~45 roles.
+Rejected: the permission map already exists and scales better than role proliferation. ADPA has 51 server modules; a role-only model would require ~51 roles.
 
 ### Option B (Recommended): Role + permission map with `verifyTenantAccess` gateway
 | Dimension | Assessment |
