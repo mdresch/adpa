@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(gh pr *)",
+      "Bash(git pull *)",
+      "Bash(git merge *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh api *)",
+      "Bash(git ls-remote *)",
+      "Bash(dotnet build *)",
+      "Bash(git show *)",
+      "Bash(cp /tmp/head_pr6b_test.ts /d/Source/adpa/server/src/__tests__/modules/federated-capability-ownership/overrideApprovalAtomicity.test.ts)",
+      "Bash(npx jest *)"
+    ]
+  }
+}

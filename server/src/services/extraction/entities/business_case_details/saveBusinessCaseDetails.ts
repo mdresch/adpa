@@ -4,7 +4,7 @@
 
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
-import { PersistenceResult, normalizeNumeric } from '../../base/Persistence'
+import { PersistenceResult, normalizeNumeric, normalizeInteger } from '../../base/Persistence'
 import type { BusinessCaseDetails } from './types'
 
 export async function saveBusinessCaseDetails(
@@ -35,7 +35,7 @@ export async function saveBusinessCaseDetails(
                 e.problem_statement || null,
                 e.proposed_solution || null,
                 normalizeNumeric(e.estimated_roi),
-                e.payback_period_months || null,
+                normalizeInteger(e.payback_period_months),
                 normalizeNumeric(e.npv_value),
                 e.strategic_category || null,
                 e.source_document_id || null,

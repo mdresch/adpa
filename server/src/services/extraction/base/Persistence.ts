@@ -203,6 +203,17 @@ export function normalizeNumeric(value: any): number | null {
 }
 
 /**
+ * Normalize a value expected to land in an `integer` column.
+ * LLM extraction can return a fractional number (e.g. a computed payback
+ * period) even when prompted for a whole number; round rather than let
+ * Postgres reject the insert with "invalid input syntax for type integer".
+ */
+export function normalizeInteger(value: any): number | null {
+  const parsed = normalizeNumeric(value)
+  return parsed === null ? null : Math.round(parsed)
+}
+
+/**
  * Normalize enum value to allowed set
  */
 export function normalizeEnum<T extends string>(
