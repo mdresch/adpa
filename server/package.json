@@ -62,7 +62,7 @@
     "@ai-sdk/google": "^3.0.29",
     "@ai-sdk/mistral": "^2.0.26",
     "@ai-sdk/openai": "^2.0.88",
-    "@ai-sdk/provider-utils": "^4.0.15",
+    "@ai-sdk/provider-utils": "^4.0.33",
     "@ai-sdk/xai": "^2.0.42",
     "@anthropic-ai/sdk": "^0.71.2",
     "@cantoo/pdf-lib": "^2.5.3",

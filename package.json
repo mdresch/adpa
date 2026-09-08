@@ -35,7 +35,7 @@
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",
     "@ai-sdk/deepseek": "^2.0.20",
-    "@ai-sdk/provider-utils": "^4.0.15",
+    "@ai-sdk/provider-utils": "^4.0.33",
     "@ai-sdk/xai": "^3.0.56",
     "@anthropic-ai/sdk": "^0.74.0",
     "@azure/storage-blob": "^12.33.0",
