@@ -1,0 +1,40 @@
+services:
+  postgres-dev:
+    image: pgvector/pgvector:pg17
+    container_name: adpa-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: adpa
+    ports:
+      - "5432:5432"
+    volumes:
+      - adpa_postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d adpa"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  postgres-test:
+    image: pgvector/pgvector:pg17
+    container_name: adpa-postgres-test
+    restart: "no"
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+      POSTGRES_DB: adpa_test_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - adpa_postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d adpa_test_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  adpa_postgres_dev_data:
+  adpa_postgres_test_data:
