@@ -9,16 +9,22 @@ module.exports = async () => {
   // not the main .env.
   dotenv.config({ path: path.join(serverDir, '.env.test') });
 
-  const dbHost = process.env.AZURE_TEST_DB_HOST;
-  const dbPort = process.env.AZURE_TEST_DB_PORT || '5432';
-  const dbUser = process.env.AZURE_TEST_DB_USER;
-  const dbPassword = process.env.AZURE_TEST_DB_PASSWORD;
+  const useLocal = process.env.USE_LOCAL_TEST_DB === 'true' || 
+                   process.env.DATABASE_URL?.includes('5433') || 
+                   (!process.env.AZURE_TEST_DB_HOST && (process.env.LOCAL_TEST_DB_HOST || process.env.DB_PORT === '5433'));
+
+  const dbHost = useLocal ? (process.env.LOCAL_TEST_DB_HOST || 'localhost') : process.env.AZURE_TEST_DB_HOST;
+  const dbPort = useLocal ? (process.env.LOCAL_TEST_DB_PORT || '5433') : (process.env.AZURE_TEST_DB_PORT || '5432');
+  const dbUser = useLocal ? (process.env.LOCAL_TEST_DB_USER || 'test_user') : process.env.AZURE_TEST_DB_USER;
+  const dbPassword = useLocal ? (process.env.LOCAL_TEST_DB_PASSWORD || 'test_pass') : process.env.AZURE_TEST_DB_PASSWORD;
   const templateDbName = 'test_template';
 
   console.log('[GLOBAL-TEARDOWN] Cleaning up...');
 
   if (dbHost && dbUser && dbPassword) {
-    const adminDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/postgres?sslmode=require`;
+    const isLocal = dbHost === 'localhost' || dbHost === '127.0.0.1' || dbPort === '5433';
+    const sslParam = isLocal ? '' : '?sslmode=require';
+    const adminDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/postgres${sslParam}`;
     const adminPool = new Pool({ connectionString: adminDbUrl });
     try {
       const res = await adminPool.query("SELECT datname FROM pg_database WHERE datname LIKE 'test_db_worker_%'");

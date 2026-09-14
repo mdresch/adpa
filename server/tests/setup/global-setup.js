@@ -13,21 +13,27 @@ module.exports = async () => {
   // of the test bootstrap path entirely.
   dotenv.config({ path: path.join(serverDir, '.env.test') });
 
-  const dbHost = process.env.AZURE_TEST_DB_HOST;
-  const dbPort = process.env.AZURE_TEST_DB_PORT || '5432';
-  const dbUser = process.env.AZURE_TEST_DB_USER;
-  const dbPassword = process.env.AZURE_TEST_DB_PASSWORD;
+  const useLocal = process.env.USE_LOCAL_TEST_DB === 'true' || 
+                   process.env.DATABASE_URL?.includes('5433') || 
+                   (!process.env.AZURE_TEST_DB_HOST && (process.env.LOCAL_TEST_DB_HOST || process.env.DB_PORT === '5433'));
+
+  const dbHost = useLocal ? (process.env.LOCAL_TEST_DB_HOST || 'localhost') : process.env.AZURE_TEST_DB_HOST;
+  const dbPort = useLocal ? (process.env.LOCAL_TEST_DB_PORT || '5433') : (process.env.AZURE_TEST_DB_PORT || '5432');
+  const dbUser = useLocal ? (process.env.LOCAL_TEST_DB_USER || 'test_user') : process.env.AZURE_TEST_DB_USER;
+  const dbPassword = useLocal ? (process.env.LOCAL_TEST_DB_PASSWORD || 'test_pass') : process.env.AZURE_TEST_DB_PASSWORD;
 
   if (!dbHost || !dbUser || !dbPassword || dbPassword.startsWith('<FILL_IN')) {
     throw new Error(
       '[GLOBAL-SETUP] AZURE_TEST_DB_HOST / AZURE_TEST_DB_USER / AZURE_TEST_DB_PASSWORD ' +
-      'are not set in server/.env.test. Fill these in with a real (ideally test-only) ' +
-      'Postgres role on the Azure server before running integration tests.'
+      '(or LOCAL_TEST_DB_* defaults) are not set in server/.env.test.'
     );
   }
 
+  const isLocal = dbHost === 'localhost' || dbHost === '127.0.0.1' || dbPort === '5433';
+  const sslParam = isLocal ? '' : '?sslmode=require';
+  const psqlSsl = isLocal ? '' : ' sslmode=require';
   const templateDbName = 'test_template';
-  const maintenanceDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/postgres?sslmode=require`;
+  const maintenanceDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/postgres${sslParam}`;
 
   // No local container to start or wait on -- Azure Postgres is already
   // running. Previously this step ran `docker-compose up` and polled
@@ -49,7 +55,7 @@ module.exports = async () => {
   }
 
   async function connectWithRetry(dbName) {
-    const url = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbName}?sslmode=require`;
+    const url = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbName}${sslParam}`;
     let lastErr;
     for (let attempt = 1; attempt <= 10; attempt++) {
       // idleTimeoutMillis is deliberately generous (not e.g. 1000ms), not a
@@ -101,7 +107,7 @@ module.exports = async () => {
   }
 
   const schemaDevFile = path.join(serverDir, 'schema-dev.sql');
-  const templateDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${templateDbName}?sslmode=require`;
+  const templateDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${templateDbName}${sslParam}`;
 
   // Build the template database from the authoritative migration chain --
   // this is what exercises every migration in server/migrations/ in order,
@@ -136,7 +142,7 @@ module.exports = async () => {
     // the whole test bootstrap.
     try {
       execSync(
-        `psql -v ON_ERROR_STOP=1 "host=${dbHost} port=${dbPort} dbname=${templateDbName} user=${dbUser} sslmode=require"`,
+        `psql -v ON_ERROR_STOP=1 "host=${dbHost} port=${dbPort} dbname=${templateDbName} user=${dbUser}${psqlSsl}"`,
         {
           cwd: serverDir,
           input: sanitizedSnapshot,
