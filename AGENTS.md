@@ -35,10 +35,15 @@ This creates a junction `.next` → `%LOCALAPPDATA%\adpa-next-cache`. Plain `pnp
 
 ### Database & Redis
 
-- PG 16 must be running. Start with: `sudo pg_ctlcluster 16 main start`
-- Redis must be running. Start with: `redis-server --daemonize yes`
-- DB credentials are in `server/.env` (see the example file for reference)
-- Schema setup: apply `server/migrations/000_baseline.sql` using credentials from `server/.env`
+- **Local PostgreSQL (Docker)**:
+  - Start local application database (port 5432): `pnpm db:up` (stop with `pnpm db:down`, check status with `pnpm db:status`)
+  - Migrate local dev database: `pnpm db:migrate:local`
+  - Connection string: `postgresql://myuser:mypassword@localhost:5432/adpa`
+- **Jest Contracts / Test Database**:
+  - Run tests with automated test container lifecycle (spins up port 5433, migrates, tests, tears down + volume wipe):
+    `pnpm test:contracts` (or `pnpm test:contracts:features` for governed features)
+- Cloud DB credentials are in `server/.env` and `.env`
+- Schema setup: apply migrations via `pnpm migrate` or `server/migrations/000_baseline.sql`
 
 ### Authentication
 
