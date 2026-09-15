@@ -332,3 +332,4 @@ Verify:
 - [ ] **Step 4: Clean up dev container if desired**
 Run: `npm run db:down`
 Verify: `docker ps` shows dev container stopped.
+

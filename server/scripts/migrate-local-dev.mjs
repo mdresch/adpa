@@ -20,3 +20,4 @@ execSync(`"${npxCmd}" tsx scripts/run-migrations.ts --reset`, {
   stdio: 'inherit'
 });
 console.log('[MIGRATE-LOCAL] Migrations completed successfully.');
+

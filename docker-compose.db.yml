@@ -38,3 +38,4 @@ services:
 volumes:
   adpa_postgres_dev_data:
   adpa_postgres_test_data:
+

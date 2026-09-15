@@ -60,3 +60,4 @@ This feature MUST NOT break:
 | REQ-003 | Test teardown guarantee: abort test run mid-flight and verify `adpa-postgres-test` container and volume are destroyed (`docker ps -a`). |
 | REQ-004 | Verify all npm scripts (`db:up`, `db:down`, `db:status`, `test:contracts`) execute successfully in both root and `server/`. |
 | REQ-005 | Run Jest unit and contract tests locally without Azure env vars and verify database connection connects to `localhost:5433`. |
+
