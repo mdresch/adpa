@@ -57,4 +57,15 @@ router.get('/formats', documentGeneratorController.getSupportedFormats)
  */
 router.post('/validate', validateTemplateDataValidation, documentGeneratorController.validateTemplateData)
 
-export default router
+import { RouteConfig } from '../../routes/registry';
+
+const routes: RouteConfig[] = [
+  {
+    path: '/document-generator',
+    router,
+    version: '1',
+    category: 'DocumentGenerator',
+  },
+];
+
+export default routes;

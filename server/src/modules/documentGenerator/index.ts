@@ -3,7 +3,8 @@
  * Main entry point for document generation functionality
  */
 
-export { default as documentGeneratorRoutes } from './routes'
+import documentGeneratorRouteConfig from './routes';
+export const documentGeneratorRoutes = documentGeneratorRouteConfig[0].router;
 export { documentGeneratorService } from './service'
 export { documentGeneratorController } from './controller'
 export * from './types'
