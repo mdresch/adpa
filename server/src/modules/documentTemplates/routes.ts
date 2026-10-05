@@ -495,4 +495,15 @@ router.post(
   documentTemplateController.triggerTemplateAudit.bind(documentTemplateController)
 )
 
-export default router
+import { RouteConfig } from '../../routes/registry';
+
+const routes: RouteConfig[] = [
+  {
+    path: '/document-templates',
+    router,
+    version: '1',
+    category: 'DocumentTemplates',
+  },
+];
+
+export default routes;
