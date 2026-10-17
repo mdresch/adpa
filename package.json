@@ -164,7 +164,7 @@
     "frappe-gantt": "^1.0.4",
     "fs": "latest",
     "gantt-task-react": "^0.3.9",
-    "handlebars": "^4.7.9",
+    "handlebars": "^4.7.10",
     "helmet": "latest",
     "html-to-image": "^1.11.13",
     "http": "latest",
