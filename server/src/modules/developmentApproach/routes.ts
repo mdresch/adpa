@@ -132,4 +132,15 @@ router.get('/statistics', authenticateToken, requirePermission('analytics_view')
   }
 });
 
-export default router;
+import { RouteConfig } from '../../routes/registry';
+
+const routes: RouteConfig[] = [
+  {
+    path: '/development-approach',
+    router,
+    version: '1',
+    category: 'DevelopmentApproach',
+  },
+];
+
+export default routes;

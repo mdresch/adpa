@@ -33,4 +33,15 @@ router.get('/latest/:entityId', authenticate, entityAuditController.getLatestAud
 // Get all versions summary for an entity
 router.get('/versions/:entityId', authenticate, entityAuditController.getEntityVersions);
 
-export default router;
+import { RouteConfig } from '../../routes/registry';
+
+const routes: RouteConfig[] = [
+  {
+    path: '/entity-audit',
+    router,
+    version: '1',
+    category: 'EntityAudit',
+  },
+];
+
+export default routes;

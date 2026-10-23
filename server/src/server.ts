@@ -148,7 +148,7 @@ import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import developmentApproachModuleRoutes from "./modules/developmentApproach/routes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import morphicModuleRoutes from "./modules/morphic/routes"
-import entityAuditRoutes from "./modules/entityAudit/routes"
+// entityAudit routes migrated to RouteConfig[] — mounted at /api/v1/entity-audit via auto-discovery
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 import semanticProcessingRoutes from "./routes/semanticProcessingRoutes"
 import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
@@ -372,10 +372,9 @@ app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/compliance", complianceRoutes)
 app.use("/api/v1/policy-library", policyLibraryRoutes)
 app.use("/api/v1/governance", councilRouter)
-app.use("/api/v1/entity-audit", entityAuditRoutes)
 app.use("/api/v1/ip-governance", ipGovernanceRoutes)
 console.log("✅ Policy Library Routes Mounted")
-console.log("✅ Entity Audit Routes Mounted")
+console.log("✅ Entity Audit Routes Mounted (auto-discovery)")
 console.log("✅ IP Governance Routes Mounted")
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
@@ -385,7 +384,8 @@ app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/rag", ragRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
-app.use("/api/development-approach", developmentApproachModuleRoutes)
+// Legacy path alias — versioned route at /api/v1/development-approach served via auto-discovery
+if (developmentApproachModuleRoutes && developmentApproachModuleRoutes[0]) app.use("/api/development-approach", developmentApproachModuleRoutes[0].router)
 app.use("/api/tasks", tasksRoutes)
 app.use("/api/programs", programRoutes)
 app.use("/api/goals", goalsRoutes)

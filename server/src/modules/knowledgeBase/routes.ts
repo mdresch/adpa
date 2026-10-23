@@ -34,4 +34,15 @@ router.get('/stats', (req, res) => knowledgeBaseController.getStats(req, res))
 // Recommendations (generated AI recommendations for a project)
 router.get('/recommendations/:projectId', (req, res) => knowledgeBaseController.getRecommendationsForProject(req, res))
 
-export default router
+import { RouteConfig } from '../../routes/registry';
+
+const routes: RouteConfig[] = [
+  {
+    path: '/knowledge-base',
+    router,
+    version: '1',
+    category: 'KnowledgeBase',
+  },
+];
+
+export default routes;

@@ -288,4 +288,15 @@ router.post('/from-variance', authenticateToken, requirePermission('project_edit
   }
 });
 
-export default router;
+import { RouteConfig } from '../../routes/registry';
+
+const routes: RouteConfig[] = [
+  {
+    path: '/issues-log',
+    router,
+    version: '1',
+    category: 'IssuesLog',
+  },
+];
+
+export default routes;
