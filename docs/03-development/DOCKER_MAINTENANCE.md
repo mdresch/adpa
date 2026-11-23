@@ -1,5 +1,7 @@
 # ADPA Docker Setup and Maintenance Guide
 
+> **Current workflow:** Day-to-day development does not start from the quick start below. `docker-compose.dev.yml` is not in the repo, and there is no pgAdmin service on port 8080. Use [DOCKER_DEVELOPMENT_GUIDE.md](./DOCKER_DEVELOPMENT_GUIDE.md): `pnpm db:up` for Postgres, then run Next.js and Express on the host. `docker compose up -d` without `-f` starts `docker-compose.yml`, whose `postgres` service also binds host port 5432.
+
 ## 🐳 Overview
 
 This guide covers the Docker containerization setup for the ADPA (Advanced Document Processing Application) system, which consists of multiple services running in separate containers for optimal scalability and maintainability.

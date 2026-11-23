@@ -1,5 +1,7 @@
 # Docker Setup Completion Summary
 
+> **Current workflow:** This page is a historical snapshot. It names `docker-compose.dev.yml`, `Dockerfile.dev`, and a Postgres 15 image that are not what local development uses now. Follow [DOCKER_DEVELOPMENT_GUIDE.md](./DOCKER_DEVELOPMENT_GUIDE.md) for `docker-compose.db.yml`, `pnpm db:up`, and `pnpm db:migrate:local`.
+
 ## Overview
 The ADPA application has been successfully containerized with a comprehensive Docker setup that includes production-ready images, development environment, and complete maintenance documentation.
 
